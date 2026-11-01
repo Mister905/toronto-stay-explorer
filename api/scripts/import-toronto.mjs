@@ -25,7 +25,6 @@ if (!process.env.DATABASE_URL) {
 }
 
 // Create a connection pool for communicating with Supabase Postgres.
-// SSL is required for this hosted database connection.
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
@@ -47,7 +46,10 @@ const sourceName = 'Inside Airbnb';
 const sourceUrl =
   'https://data.insideairbnb.com/canada/on/toronto/2026-09-16/data/listings.csv.gz';
 
-// Track validation results while the CSV streams through the script.
+// Keep each SQL batch below PostgreSQL's query parameter limit.
+const batchSize = 500;
+
+// These counters track the first pass through the CSV.
 let rowCount = 0;
 let invalidCount = 0;
 let samplePrinted = false;
@@ -55,7 +57,219 @@ let samplePrinted = false;
 // A Set keeps each neighbourhood name only once.
 const neighbourhoodNames = new Set();
 
-// A Writable stream receives one parsed CSV row at a time.
+// Return trimmed text, or null when the CSV field is blank.
+function nullableText(value) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+// Convert a CSV number to a JavaScript number.
+// Blank fields become null; prices have currency symbols and commas removed.
+function nullableNumber(value) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+
+  const number = Number(trimmed.replace(/[$,]/g, ''));
+  if (!Number.isFinite(number)) {
+    throw new Error(`Invalid numeric value: ${value}`);
+  }
+
+  return number;
+}
+
+// Convert a CSV value to a whole number.
+function nullableInteger(value) {
+  const number = nullableNumber(value);
+  if (number === null) return null;
+
+  if (!Number.isInteger(number)) {
+    throw new Error(`Invalid integer value: ${value}`);
+  }
+
+  return number;
+}
+
+// Convert CSV true/false values to JavaScript booleans.
+function nullableBoolean(value) {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 't' || normalized === 'true') return true;
+  if (normalized === 'f' || normalized === 'false') return false;
+
+  throw new Error(`Invalid boolean value: ${value}`);
+}
+
+// Parse the amenities field, which is stored in the CSV as a JSON array.
+function nullableAmenities(value) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+
+  const amenities = JSON.parse(trimmed);
+  if (!Array.isArray(amenities)) {
+    throw new Error('Amenities value is not a JSON array.');
+  }
+
+  return amenities;
+}
+
+// Convert one CSV row into values matching the listings table columns.
+function listingValues(row, snapshotId, neighbourhoodIds) {
+  const neighbourhoodName = row.neighbourhood_cleansed.trim();
+  const neighbourhoodId = neighbourhoodIds.get(neighbourhoodName);
+
+  // A missing ID means the neighbourhood lookup was not populated correctly.
+  if (neighbourhoodId === undefined) {
+    throw new Error(`Unknown neighbourhood: ${neighbourhoodName}`);
+  }
+
+  return [
+    snapshotId,
+    row.id, // Keep the large source ID as text to avoid JavaScript precision loss.
+    neighbourhoodId,
+    row.name.trim(),
+    nullableText(row.description),
+    nullableText(row.picture_url),
+    nullableText(row.listing_url),
+    nullableNumber(row.latitude),
+    nullableNumber(row.longitude),
+    nullableText(row.property_type),
+    nullableText(row.room_type),
+    nullableInteger(row.accommodates),
+    nullableInteger(row.bedrooms),
+    nullableInteger(row.beds),
+    nullableText(row.bathrooms_text),
+    nullableNumber(row.price),
+    nullableAmenities(row.amenities),
+    nullableInteger(row.minimum_nights),
+    nullableInteger(row.maximum_nights),
+    nullableBoolean(row.has_availability),
+    nullableInteger(row.availability_30),
+    nullableInteger(row.availability_90),
+    nullableInteger(row.availability_365),
+    nullableInteger(row.number_of_reviews),
+    nullableInteger(row.number_of_reviews_ltm),
+    nullableNumber(row.review_scores_rating),
+    nullableNumber(row.review_scores_cleanliness),
+    nullableNumber(row.review_scores_location),
+    nullableText(row.last_review),
+    nullableText(row.last_scraped),
+  ];
+}
+
+// These are the columns in the same order as listingValues().
+const listingColumns = [
+  'snapshot_id',
+  'source_listing_id',
+  'neighbourhood_id',
+  'name',
+  'description',
+  'picture_url',
+  'listing_url',
+  'latitude',
+  'longitude',
+  'property_type',
+  'room_type',
+  'accommodates',
+  'bedrooms',
+  'beds',
+  'bathrooms_text',
+  'price_cad',
+  'amenities',
+  'minimum_nights',
+  'maximum_nights',
+  'has_availability',
+  'availability_30',
+  'availability_90',
+  'availability_365',
+  'number_of_reviews',
+  'number_of_reviews_ltm',
+  'review_scores_rating',
+  'review_scores_cleanliness',
+  'review_scores_location',
+  'last_review',
+  'last_scraped',
+];
+
+// Make a stream that converts rows and writes them to PostgreSQL in batches.
+function createListingWriter(client, snapshotId, neighbourhoodIds) {
+  let batch = [];
+  let listingsWritten = 0;
+
+  async function flushBatch() {
+    if (batch.length === 0) return;
+
+    const values = batch.flat();
+
+    // Build placeholders such as ($1, $2, ...), then ($31, $32, ...).
+    const valueGroups = batch.map((_, rowIndex) => {
+      const placeholders = listingColumns.map((_, columnIndex) => {
+        const parameterNumber =
+          rowIndex * listingColumns.length + columnIndex + 1;
+        return `$${parameterNumber}`;
+      });
+
+      return `(${placeholders.join(', ')})`;
+    });
+
+    // If this snapshot is imported again, update the existing listing row.
+    const updateColumns = listingColumns
+      .slice(2)
+      .map((column) => `${column} = excluded.${column}`);
+
+    const sql = `
+      insert into public.listings (${listingColumns.join(', ')})
+      values ${valueGroups.join(', ')}
+      on conflict (snapshot_id, source_listing_id)
+      do update set ${updateColumns.join(', ')}
+    `;
+
+    await client.query(sql, values);
+
+    listingsWritten += batch.length;
+    batch = [];
+
+    console.log(`Listings written: ${listingsWritten}`);
+  }
+
+  return new Writable({
+    objectMode: true,
+
+    write(row, _encoding, callback) {
+      try {
+        const values = listingValues(row, snapshotId, neighbourhoodIds);
+
+        // Send amenities as JSON text so PostgreSQL stores it as jsonb.
+        if (values[16] !== null) {
+          values[16] = JSON.stringify(values[16]);
+        }
+
+        batch.push(values);
+
+        // Flush the batch once it reaches the configured size.
+        if (batch.length >= batchSize) {
+          flushBatch().then(
+            () => callback(),
+            (error) => callback(error),
+          );
+        } else {
+          callback();
+        }
+      } catch (error) {
+        callback(error);
+      }
+    },
+
+    // The last batch may be smaller than batchSize, so write it at the end.
+    final(callback) {
+      flushBatch().then(
+        () => callback(),
+        (error) => callback(error),
+      );
+    },
+  });
+}
+
+// A Writable stream receives one parsed CSV row at a time during validation.
 const validateRows = new Writable({
   objectMode: true,
 
@@ -69,7 +283,6 @@ const validateRows = new Writable({
       errors.push('invalid listing ID');
     }
 
-    // These fields are required for each listing we plan to import.
     if (!row.name?.trim()) {
       errors.push('missing name');
     }
@@ -78,13 +291,11 @@ const validateRows = new Writable({
       errors.push('missing cleaned neighbourhood');
     }
 
-    // Guest capacity must be a whole number of at least one.
     const accommodates = Number(row.accommodates);
     if (!Number.isInteger(accommodates) || accommodates < 1) {
       errors.push('invalid guest capacity');
     }
 
-    // Count invalid rows and print details for the first five only.
     if (errors.length > 0) {
       invalidCount += 1;
       if (invalidCount <= 5) {
@@ -92,7 +303,7 @@ const validateRows = new Writable({
       }
     }
 
-    // Print one example row to make it easier to check the parsed data.
+    // Print one example row so the parsed values can be checked.
     if (!samplePrinted) {
       console.log('Sample:', {
         sourceListingId: row.id,
@@ -102,19 +313,18 @@ const validateRows = new Writable({
       samplePrinted = true;
     }
 
-    // Collect neighbourhood names for insertion after validation.
+    // Collect distinct neighbourhood names for the database lookup.
     if (row.neighbourhood_cleansed?.trim()) {
       neighbourhoodNames.add(row.neighbourhood_cleansed.trim());
     }
 
-    // Tell the stream this row has finished processing.
     callback();
   },
 });
 
 try {
-  // Stream the file through decompression, CSV parsing, and validation.
-  // This avoids loading the entire dataset into memory at once.
+  // First pass: decompress, parse, and validate the entire CSV.
+  // No database writes happen until this pass succeeds.
   await pipeline(
     createReadStream(sourcePath),
     createGunzip(),
@@ -125,21 +335,17 @@ try {
   console.log(`Rows read: ${rowCount}`);
   console.log(`Rows with invalid required fields: ${invalidCount}`);
 
-  // Do not write anything to the database if validation failed.
   if (rowCount === 0 || invalidCount > 0) {
     throw new Error('Validation failed; database writes were stopped.');
   }
 
-  // Get one database connection so all writes use the same transaction.
+  // Use one connection so all database changes share a transaction.
   const client = await pool.connect();
 
   try {
-    // Start a transaction so the snapshot and neighbourhood writes succeed
-    // together, or can be rolled back together if something goes wrong.
     await client.query('begin');
 
-    // Create the dataset snapshot record, or update its source URL if this
-    // source and date have already been imported. Return its database ID.
+    // Create the snapshot record, or reuse the existing record for this date.
     const snapshotResult = await client.query(
       `insert into public.dataset_snapshots (source, source_url, snapshot_date)
        values ($1, $2, $3)
@@ -149,7 +355,9 @@ try {
       [sourceName, sourceUrl, snapshotDate],
     );
 
-    // Insert all distinct neighbourhood names. Existing names are left alone.
+    const snapshotId = snapshotResult.rows[0].id;
+
+    // Add neighbourhoods that aren't already in the lookup table.
     await client.query(
       `insert into public.neighbourhoods (name)
        select distinct name
@@ -158,23 +366,49 @@ try {
       [[...neighbourhoodNames]],
     );
 
-    // Make the transaction's changes permanent.
+    // Fetch database IDs for matching each CSV neighbourhood to its listing.
+    const neighbourhoodResult = await client.query(
+      `select id, name
+       from public.neighbourhoods
+       where name = any($1::text[])`,
+      [[...neighbourhoodNames]],
+    );
+
+    const neighbourhoodIds = new Map(
+      neighbourhoodResult.rows.map((row) => [row.name, row.id]),
+    );
+
+    // Second pass: stream the CSV again and write listing rows in batches.
+    const listingWriter = createListingWriter(
+      client,
+      snapshotId,
+      neighbourhoodIds,
+    );
+
+    await pipeline(
+      createReadStream(sourcePath),
+      createGunzip(),
+      parse({ columns: true, bom: true, skip_empty_lines: true }),
+      listingWriter,
+    );
+
+    // Commit snapshot, neighbourhood, and listing changes together.
     await client.query('commit');
 
-    console.log('Snapshot record saved with ID:', snapshotResult.rows[0].id);
-    console.log(`Neighbourhoods found in CSV: ${neighbourhoodNames.size}`);
+    console.log('Snapshot record saved with ID:', snapshotId);
+    console.log(`Neighbourhoods available: ${neighbourhoodIds.size}`);
+    console.log(`Listings imported: ${rowCount}`);
   } catch (error) {
-    // Undo all writes in this transaction if any database step failed.
+    // Undo all database changes if any part of the import fails.
     await client.query('rollback');
     throw error;
   } finally {
-    // Return the connection to the pool whether the transaction passed or not.
     client.release();
   }
 } catch (error) {
-  console.error('Import preparation failed:', error.message);
+  console.error('Import failed:', error.message);
   process.exitCode = 1;
 } finally {
-  // Close the pool so the script can exit cleanly.
+  // Close the pool so Node can exit cleanly.
   await pool.end();
 }
