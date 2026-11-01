@@ -5,6 +5,15 @@ import { createGunzip } from 'node:zlib';
 import { parse } from 'csv-parse';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import 'dotenv/config';
+import pg from 'pg';
+
+const { Pool } = pg;
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, '../..');
@@ -77,7 +86,14 @@ try {
   if (rowCount === 0 || invalidCount > 0) {
     process.exitCode = 1;
   }
+
+  const result = await pool.query(
+    'select current_database() as database, current_user as user',
+  );
+  console.log('Database connection:', result.rows[0]);
 } catch (error) {
   console.error('Could not read or validate the listings file:', error.message);
   process.exitCode = 1;
+} finally {
+  await pool.end();
 }
