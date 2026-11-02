@@ -72,11 +72,12 @@ export class AppService implements OnModuleDestroy {
     return result.rows.map((row) => row.name);
   }
 
-  // Return a page of listings, optionally limited to one neighbourhood.
   async getListings(
     limit: number,
     offset: number,
     neighbourhood: string | null,
+    minPrice: string | null,
+    maxPrice: string | null,
   ): Promise<ListingsPage> {
     const result = await this.pool.query<{
       snapshotDate: string | null;
@@ -98,6 +99,7 @@ export class AppService implements OnModuleDestroy {
            n.name as neighbourhood,
            l.room_type as "roomType",
            l.property_type as "propertyType",
+           l.price_cad as "priceValue",
            l.price_cad::text as "priceCad",
            l.accommodates,
            l.bedrooms,
@@ -107,15 +109,27 @@ export class AppService implements OnModuleDestroy {
          left join public.neighbourhoods n on n.id = l.neighbourhood_id
        ),
        filtered_listings as (
-         select *
+         select
+           "listingId",
+           name,
+           "pictureUrl",
+           neighbourhood,
+           "roomType",
+           "propertyType",
+           "priceCad",
+           accommodates,
+           bedrooms,
+           "reviewScore"
          from all_listings
-         where $2::text is null or neighbourhood = $2
+         where ($2::text is null or neighbourhood = $2)
+           and ($3::numeric is null or "priceValue" >= $3)
+           and ($4::numeric is null or "priceValue" <= $4)
        ),
        page as (
          select *
          from filtered_listings
          order by name, "listingId"
-         limit $3 offset $4
+         limit $5 offset $6
        )
        select
          (select snapshot_date from latest_snapshot) as "snapshotDate",
@@ -124,11 +138,11 @@ export class AppService implements OnModuleDestroy {
            (select json_agg(page order by page.name, page."listingId") from page),
            '[]'::json
          ) as items`,
-      ['Inside Airbnb', neighbourhood, limit, offset],
+      ['Inside Airbnb', neighbourhood, minPrice, maxPrice, limit, offset],
     );
-
+  
     const row = result.rows[0];
-
+  
     return {
       snapshotDate: row.snapshotDate,
       total: Number(row.total),

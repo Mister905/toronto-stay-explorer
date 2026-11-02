@@ -49,6 +49,13 @@ function App() {
   const [neighbourhoodError, setNeighbourhoodError] = useState<string | null>(
     null,
   );
+  const [minPriceInput, setMinPriceInput] = useState("");
+  const [maxPriceInput, setMaxPriceInput] = useState("");
+  const [priceRange, setPriceRange] = useState({
+    minPrice: "",
+    maxPrice: "",
+  });
+  const [priceError, setPriceError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -97,6 +104,12 @@ function App() {
       if (selectedNeighbourhood) {
         url.searchParams.set("neighbourhood", selectedNeighbourhood);
       }
+      if (priceRange.minPrice) {
+        url.searchParams.set("minPrice", priceRange.minPrice);
+      }
+      if (priceRange.maxPrice) {
+        url.searchParams.set("maxPrice", priceRange.maxPrice);
+      }
 
       try {
         const response = await fetch(url, { signal: controller.signal });
@@ -128,7 +141,7 @@ function App() {
     void loadListings();
 
     return () => controller.abort();
-  }, [page, reloadKey, selectedNeighbourhood]);
+  }, [page, reloadKey, selectedNeighbourhood, priceRange]);
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -209,6 +222,83 @@ function App() {
               </select>
             </div>
           </div>
+
+          <form
+            className="price-filter"
+            onSubmit={(event) => {
+              event.preventDefault();
+
+              if (
+                minPriceInput &&
+                maxPriceInput &&
+                Number(minPriceInput) > Number(maxPriceInput)
+              ) {
+                setPriceError("Minimum price cannot exceed maximum price.");
+                return;
+              }
+
+              setPriceError(null);
+              setPage(0);
+              setPriceRange({
+                minPrice: minPriceInput.trim(),
+                maxPrice: maxPriceInput.trim(),
+              });
+            }}
+          >
+            <label>
+              Minimum price
+              <span className="price-input">
+                <span aria-hidden="true">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="99999999.99"
+                  step="0.01"
+                  value={minPriceInput}
+                  onChange={(event) => setMinPriceInput(event.target.value)}
+                  placeholder="Any"
+                />
+              </span>
+            </label>
+
+            <label>
+              Maximum price
+              <span className="price-input">
+                <span aria-hidden="true">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="99999999.99"
+                  step="0.01"
+                  value={maxPriceInput}
+                  onChange={(event) => setMaxPriceInput(event.target.value)}
+                  placeholder="Any"
+                />
+              </span>
+            </label>
+
+            <button type="submit">Apply price</button>
+
+            <button
+              type="button"
+              className="clear-filter"
+              onClick={() => {
+                setMinPriceInput("");
+                setMaxPriceInput("");
+                setPriceRange({ minPrice: "", maxPrice: "" });
+                setPriceError(null);
+                setPage(0);
+              }}
+            >
+              Clear
+            </button>
+
+            {priceError && (
+              <p className="price-error" role="alert">
+                {priceError}
+              </p>
+            )}
+          </form>
 
           {loading && (
             <p className="message" role="status">
