@@ -319,14 +319,21 @@
 
 .results-controls {
   display: flex;
+  flex: 1 1 100%;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 9px;
   color: #5e665f;
   font-size: 12px;
 }
 
+.results-controls label:not(:first-child) {
+  margin-left: 8px;
+}
+
 .results-controls select {
-  max-width: 280px;
+  max-width: min(280px, 100%);
   padding: 9px 30px 9px 11px;
   border: 1px solid #cdd3cb;
   border-radius: 5px;
@@ -450,5 +457,9 @@
 
   .site-footer {
     flex-direction: column;
+  }
+
+  .results-controls {
+    justify-content: flex-start;
   }
 }

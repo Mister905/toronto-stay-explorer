@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Controller,
-  Get,
-  Query,
-} from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
 import { AppService } from './app.service.js';
 
 function parseInteger(
@@ -26,10 +21,7 @@ function parseInteger(
   return parsed;
 }
 
-function parsePrice(
-  name: string,
-  value: string | undefined,
-): string | null {
+function parsePrice(name: string, value: string | undefined): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
 
@@ -72,12 +64,22 @@ export class AppController {
     @Query('neighbourhood') neighbourhoodQuery?: string,
     @Query('minPrice') minPriceQuery?: string,
     @Query('maxPrice') maxPriceQuery?: string,
+    @Query('guests') guestsQuery?: string,
+    @Query('bedrooms') bedroomsQuery?: string,
   ) {
     const limit = parseInteger('limit', limitQuery, 20);
     const offset = parseInteger('offset', offsetQuery, 0);
     const neighbourhood = neighbourhoodQuery?.trim() || null;
-    const minPrice = minPriceQuery ? parsePrice('minPrice', minPriceQuery) : null;
-    const maxPrice = maxPriceQuery ? parsePrice('maxPrice', maxPriceQuery) : null;
+    const minPrice = minPriceQuery
+      ? parsePrice('minPrice', minPriceQuery)
+      : null;
+    const maxPrice = maxPriceQuery
+      ? parsePrice('maxPrice', maxPriceQuery)
+      : null;
+    const guests = guestsQuery ? parseInteger('guests', guestsQuery, 1) : null;
+    const bedrooms = bedroomsQuery
+      ? parseInteger('bedrooms', bedroomsQuery, 1)
+      : null;
 
     if (limit < 1 || limit > 100) {
       throw new BadRequestException('limit must be between 1 and 100.');
@@ -91,6 +93,14 @@ export class AppController {
       throw new BadRequestException('minPrice cannot exceed maxPrice.');
     }
 
-    return this.appService.getListings(limit, offset, neighbourhood, minPrice, maxPrice);
+    return this.appService.getListings(
+      limit,
+      offset,
+      neighbourhood,
+      minPrice,
+      maxPrice,
+      guests,
+      bedrooms,
+    );
   }
 }

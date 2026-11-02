@@ -78,6 +78,8 @@ export class AppService implements OnModuleDestroy {
     neighbourhood: string | null,
     minPrice: string | null,
     maxPrice: string | null,
+    guests: number | null,
+    bedrooms: number | null,
   ): Promise<ListingsPage> {
     const result = await this.pool.query<{
       snapshotDate: string | null;
@@ -124,12 +126,14 @@ export class AppService implements OnModuleDestroy {
          where ($2::text is null or neighbourhood = $2)
            and ($3::numeric is null or "priceValue" >= $3)
            and ($4::numeric is null or "priceValue" <= $4)
+           and ($5::integer is null or accommodates >= $5)
+           and ($6::integer is null or bedrooms = $6)
        ),
        page as (
          select *
          from filtered_listings
          order by name, "listingId"
-         limit $5 offset $6
+         limit $7 offset $8
        )
        select
          (select snapshot_date from latest_snapshot) as "snapshotDate",
@@ -138,11 +142,11 @@ export class AppService implements OnModuleDestroy {
            (select json_agg(page order by page.name, page."listingId") from page),
            '[]'::json
          ) as items`,
-      ['Inside Airbnb', neighbourhood, minPrice, maxPrice, limit, offset],
+      ['Inside Airbnb', neighbourhood, minPrice, maxPrice, guests, bedrooms, limit, offset],
     );
-  
+
     const row = result.rows[0];
-  
+
     return {
       snapshotDate: row.snapshotDate,
       total: Number(row.total),

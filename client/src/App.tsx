@@ -49,6 +49,8 @@ function App() {
   const [neighbourhoodError, setNeighbourhoodError] = useState<string | null>(
     null,
   );
+  const [guests, setGuests] = useState("");
+  const [bedrooms, setBedrooms] = useState("");
   const [minPriceInput, setMinPriceInput] = useState("");
   const [maxPriceInput, setMaxPriceInput] = useState("");
   const [priceRange, setPriceRange] = useState({
@@ -110,6 +112,12 @@ function App() {
       if (priceRange.maxPrice) {
         url.searchParams.set("maxPrice", priceRange.maxPrice);
       }
+      if (guests) {
+        url.searchParams.set("guests", guests);
+      }
+      if (bedrooms) {
+        url.searchParams.set("bedrooms", bedrooms);
+      }
 
       try {
         const response = await fetch(url, { signal: controller.signal });
@@ -141,7 +149,7 @@ function App() {
     void loadListings();
 
     return () => controller.abort();
-  }, [page, reloadKey, selectedNeighbourhood, priceRange]);
+  }, [page, reloadKey, selectedNeighbourhood, priceRange, guests, bedrooms]);
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -220,6 +228,41 @@ function App() {
                   </option>
                 ))}
               </select>
+              <label htmlFor="guests-filter">Guests</label>
+              <select
+                id="guests-filter"
+                value={guests}
+                onChange={(event) => {
+                  setPage(0);
+                  setGuests(event.target.value);
+                }}
+              >
+                <option value="">Any</option>
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((count) => (
+                  <option key={count} value={count}>
+                    {count}
+                  </option>
+                ))}
+                <option value="9">9+</option>
+              </select>
+
+              <label htmlFor="bedrooms-filter">Bedrooms</label>
+              <select
+                id="bedrooms-filter"
+                value={bedrooms}
+                onChange={(event) => {
+                  setPage(0);
+                  setBedrooms(event.target.value);
+                }}
+              >
+                <option value="">Any</option>
+                <option value="0">Studio</option>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((count) => (
+                  <option key={count} value={count}>
+                    {count}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -288,6 +331,8 @@ function App() {
                 setPriceRange({ minPrice: "", maxPrice: "" });
                 setPriceError(null);
                 setPage(0);
+                setGuests("");
+                setBedrooms("");
               }}
             >
               Clear
