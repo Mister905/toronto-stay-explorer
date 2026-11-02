@@ -317,6 +317,34 @@
   color: #405e4a;
 }
 
+.results-controls {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #5e665f;
+  font-size: 12px;
+}
+
+.results-controls select {
+  max-width: 280px;
+  padding: 9px 30px 9px 11px;
+  border: 1px solid #cdd3cb;
+  border-radius: 5px;
+  background: #fffefa;
+  color: #34463b;
+  font: inherit;
+}
+
+.results-controls select:focus-visible {
+  outline: 3px solid #8aa994;
+  outline-offset: 2px;
+}
+
+.filter-error {
+  color: #982f2f;
+  font-size: 12px;
+}
+
 @media (max-width: 900px) {
   .listing-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

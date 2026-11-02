@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import './App.css';
+import { useEffect, useState } from "react";
+import "./App.css";
 
-const API_BASE_URL = 'http://localhost:3000';
+const API_BASE_URL = "http://localhost:3000";
 const PAGE_SIZE = 12;
 
 type Listing = {
@@ -26,14 +26,14 @@ type ListingsResponse = {
 };
 
 function formatPrice(price: string | null): string {
-  if (price === null) return 'Price unavailable';
+  if (price === null) return "Price unavailable";
 
   const amount = Number(price);
-  if (!Number.isFinite(amount)) return 'Price unavailable';
+  if (!Number.isFinite(amount)) return "Price unavailable";
 
-  return new Intl.NumberFormat('en-CA', {
-    style: 'currency',
-    currency: 'CAD',
+  return new Intl.NumberFormat("en-CA", {
+    style: "currency",
+    currency: "CAD",
     maximumFractionDigits: 0,
   }).format(amount);
 }
@@ -44,6 +44,44 @@ function App() {
   const [data, setData] = useState<ListingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [neighbourhoods, setNeighbourhoods] = useState<string[]>([]);
+  const [selectedNeighbourhood, setSelectedNeighbourhood] = useState("");
+  const [neighbourhoodError, setNeighbourhoodError] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadNeighbourhoods() {
+      try {
+        const response = await fetch(`${API_BASE_URL}/neighbourhoods`, {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`The neighbourhood API returned ${response.status}.`);
+        }
+
+        const names = (await response.json()) as string[];
+        setNeighbourhoods(names);
+      } catch (caughtError) {
+        if (caughtError instanceof Error && caughtError.name === "AbortError") {
+          return;
+        }
+
+        setNeighbourhoodError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to load neighbourhoods.",
+        );
+      }
+    }
+
+    void loadNeighbourhoods();
+
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -53,9 +91,12 @@ function App() {
       setError(null);
 
       const offset = page * PAGE_SIZE;
-      const url = new URL('/listings', API_BASE_URL);
-      url.searchParams.set('limit', String(PAGE_SIZE));
-      url.searchParams.set('offset', String(offset));
+      const url = new URL("/listings", API_BASE_URL);
+      url.searchParams.set("limit", String(PAGE_SIZE));
+      url.searchParams.set("offset", String(offset));
+      if (selectedNeighbourhood) {
+        url.searchParams.set("neighbourhood", selectedNeighbourhood);
+      }
 
       try {
         const response = await fetch(url, { signal: controller.signal });
@@ -68,14 +109,14 @@ function App() {
         setData(listings);
       } catch (caughtError) {
         // Ignore the request cancelled when the page changes or unmounts.
-        if (caughtError instanceof Error && caughtError.name === 'AbortError') {
+        if (caughtError instanceof Error && caughtError.name === "AbortError") {
           return;
         }
 
         setError(
           caughtError instanceof Error
             ? caughtError.message
-            : 'Unable to load listings.',
+            : "Unable to load listings.",
         );
       } finally {
         if (!controller.signal.aborted) {
@@ -87,7 +128,7 @@ function App() {
     void loadListings();
 
     return () => controller.abort();
-  }, [page, reloadKey]);
+  }, [page, reloadKey, selectedNeighbourhood]);
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -97,13 +138,19 @@ function App() {
   return (
     <div className="app-shell">
       <header className="site-header">
-        <a className="wordmark" href="/" aria-label="Toronto Stay Explorer home">
+        <a
+          className="wordmark"
+          href="/"
+          aria-label="Toronto Stay Explorer home"
+        >
           <span className="wordmark-mark" aria-hidden="true">
             T
           </span>
           <span>Toronto Stay Explorer</span>
         </a>
-        <span className="header-note">An independent data exploration project</span>
+        <span className="header-note">
+          An independent data exploration project
+        </span>
       </header>
 
       <main>
@@ -119,11 +166,11 @@ function App() {
             <span>
               {data?.snapshotDate
                 ? `Dataset snapshot: ${data.snapshotDate}`
-                : 'Toronto listing data'}
+                : "Toronto listing data"}
             </span>
             {data && (
               <span className="dataset-total">
-                {data.total.toLocaleString('en-CA')} listings
+                {data.total.toLocaleString("en-CA")} listings
               </span>
             )}
           </div>
@@ -139,10 +186,28 @@ function App() {
             {!loading && !error && (
               <p className="result-count" aria-live="polite">
                 {total === 0
-                  ? 'No listings found'
-                  : `Showing ${firstResult}–${lastResult} of ${total.toLocaleString('en-CA')}`}
+                  ? "No listings found"
+                  : `Showing ${firstResult}–${lastResult} of ${total.toLocaleString("en-CA")}`}
               </p>
             )}
+            <div className="results-controls">
+              <label htmlFor="neighbourhood-filter">Neighbourhood</label>
+              <select
+                id="neighbourhood-filter"
+                value={selectedNeighbourhood}
+                onChange={(event) => {
+                  setPage(0);
+                  setSelectedNeighbourhood(event.target.value);
+                }}
+              >
+                <option value="">All Toronto</option>
+                {neighbourhoods.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {loading && (
@@ -165,7 +230,9 @@ function App() {
           )}
 
           {!loading && !error && data?.items.length === 0 && (
-            <p className="message">There are no listings to show on this page.</p>
+            <p className="message">
+              There are no listings to show on this page.
+            </p>
           )}
 
           {!loading && !error && data && data.items.length > 0 && (
@@ -176,41 +243,37 @@ function App() {
                     <article className="listing-card">
                       <div className="listing-image">
                         {listing.pictureUrl ? (
-                          <img
-                            src={listing.pictureUrl}
-                            alt=""
-                            loading="lazy"
-                          />
+                          <img src={listing.pictureUrl} alt="" loading="lazy" />
                         ) : (
                           <div className="image-placeholder">
                             Image unavailable
                           </div>
                         )}
                         <span className="room-badge">
-                          {listing.roomType ?? 'Room type not listed'}
+                          {listing.roomType ?? "Room type not listed"}
                         </span>
                       </div>
 
                       <div className="listing-content">
                         <p className="listing-neighbourhood">
-                          {listing.neighbourhood ?? 'Toronto'}
+                          {listing.neighbourhood ?? "Toronto"}
                         </p>
                         <h3>{listing.name}</h3>
                         <p className="listing-type">
-                          {listing.propertyType ?? 'Property type not listed'}
+                          {listing.propertyType ?? "Property type not listed"}
                         </p>
 
                         <div className="listing-facts">
                           <span>
                             {listing.accommodates === null
-                              ? 'Guest capacity unavailable'
+                              ? "Guest capacity unavailable"
                               : `Up to ${listing.accommodates} guests`}
                           </span>
                           <span>
                             {listing.bedrooms === null
-                              ? 'Bedrooms unavailable'
+                              ? "Bedrooms unavailable"
                               : listing.bedrooms === 0
-                                ? 'Studio'
+                                ? "Studio"
                                 : `${listing.bedrooms} bedrooms`}
                           </span>
                         </div>
@@ -222,7 +285,7 @@ function App() {
                           </p>
                           <p className="listing-rating">
                             {listing.reviewScore === null
-                              ? 'Not yet rated'
+                              ? "Not yet rated"
                               : `★ ${Number(listing.reviewScore).toFixed(2)}`}
                           </p>
                         </div>
@@ -258,11 +321,15 @@ function App() {
 
       <footer className="site-footer">
         <p>
-          Data from{' '}
-          <a href="https://insideairbnb.com/get-the-data/" target="_blank" rel="noreferrer">
+          Data from{" "}
+          <a
+            href="https://insideairbnb.com/get-the-data/"
+            target="_blank"
+            rel="noreferrer"
+          >
             Inside Airbnb
           </a>
-          , licensed under{' '}
+          , licensed under{" "}
           <a
             href="https://creativecommons.org/licenses/by/4.0/"
             target="_blank"
@@ -272,7 +339,10 @@ function App() {
           </a>
           .
         </p>
-        <p>Toronto Stay Explorer is an independent project, not affiliated with Airbnb.</p>
+        <p>
+          Toronto Stay Explorer is an independent project, not affiliated with
+          Airbnb.
+        </p>
       </footer>
     </div>
   );

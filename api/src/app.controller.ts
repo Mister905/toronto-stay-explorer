@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { AppService } from './app.service.js';
 
-// Read an integer query value and reject malformed or unsafe values.
 function parseInteger(
   name: string,
   value: string | undefined,
@@ -41,18 +40,29 @@ export class AppController {
     return this.appService.getDatabaseStatus();
   }
 
+  @Get('neighbourhoods')
+  getNeighbourhoods(): Promise<string[]> {
+    return this.appService.getNeighbourhoods();
+  }
+
   @Get('listings')
   getListings(
     @Query('limit') limitQuery?: string,
     @Query('offset') offsetQuery?: string,
+    @Query('neighbourhood') neighbourhoodQuery?: string,
   ) {
     const limit = parseInteger('limit', limitQuery, 20);
     const offset = parseInteger('offset', offsetQuery, 0);
+    const neighbourhood = neighbourhoodQuery?.trim() || null;
 
     if (limit < 1 || limit > 100) {
       throw new BadRequestException('limit must be between 1 and 100.');
     }
 
-    return this.appService.getListings(limit, offset);
+    if (neighbourhood && neighbourhood.length > 100) {
+      throw new BadRequestException('neighbourhood is too long.');
+    }
+
+    return this.appService.getListings(limit, offset, neighbourhood);
   }
 }

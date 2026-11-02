@@ -51,7 +51,33 @@ export class AppService implements OnModuleDestroy {
     return result.rows[0];
   }
 
-  async getListings(limit: number, offset: number): Promise<ListingsPage> {
+  // Return neighbourhoods that have listings in the latest snapshot.
+  async getNeighbourhoods(): Promise<string[]> {
+    const result = await this.pool.query<{ name: string }>(
+      `with latest_snapshot as (
+         select id
+         from public.dataset_snapshots
+         where source = $1
+         order by snapshot_date desc, id desc
+         limit 1
+       )
+       select distinct n.name
+       from latest_snapshot s
+       join public.listings l on l.snapshot_id = s.id
+       join public.neighbourhoods n on n.id = l.neighbourhood_id
+       order by n.name`,
+      ['Inside Airbnb'],
+    );
+
+    return result.rows.map((row) => row.name);
+  }
+
+  // Return a page of listings, optionally limited to one neighbourhood.
+  async getListings(
+    limit: number,
+    offset: number,
+    neighbourhood: string | null,
+  ): Promise<ListingsPage> {
     const result = await this.pool.query<{
       snapshotDate: string | null;
       total: string;
@@ -80,20 +106,25 @@ export class AppService implements OnModuleDestroy {
          join latest_snapshot s on s.id = l.snapshot_id
          left join public.neighbourhoods n on n.id = l.neighbourhood_id
        ),
-       page as (
+       filtered_listings as (
          select *
          from all_listings
+         where $2::text is null or neighbourhood = $2
+       ),
+       page as (
+         select *
+         from filtered_listings
          order by name, "listingId"
-         limit $2 offset $3
+         limit $3 offset $4
        )
        select
          (select snapshot_date from latest_snapshot) as "snapshotDate",
-         (select count(*)::text from all_listings) as total,
+         (select count(*)::text from filtered_listings) as total,
          coalesce(
            (select json_agg(page order by page.name, page."listingId") from page),
            '[]'::json
          ) as items`,
-      ['Inside Airbnb', limit, offset],
+      ['Inside Airbnb', neighbourhood, limit, offset],
     );
 
     const row = result.rows[0];
