@@ -1,5 +1,5 @@
 import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
-import { AppService } from './app.service.js';
+import { AppService, type ListingSort } from './app.service.js';
 
 function parseInteger(
   name: string,
@@ -38,6 +38,27 @@ function parsePrice(name: string, value: string | undefined): string | null {
   return trimmed;
 }
 
+const sortOptions: readonly ListingSort[] = [
+  'name_asc',
+  'price_asc',
+  'price_desc',
+  'rating_desc',
+];
+
+function parseSort(value: string | undefined): ListingSort {
+  if (value === undefined || value === 'name_asc') {
+    return 'name_asc';
+  }
+
+  if (sortOptions.includes(value as ListingSort)) {
+    return value as ListingSort;
+  }
+
+  throw new BadRequestException(
+    'sort must be name_asc, price_asc, price_desc, or rating_desc.',
+  );
+}
+
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
@@ -66,6 +87,7 @@ export class AppController {
     @Query('maxPrice') maxPriceQuery?: string,
     @Query('guests') guestsQuery?: string,
     @Query('bedrooms') bedroomsQuery?: string,
+    @Query('sort') sortQuery?: string,
   ) {
     const limit = parseInteger('limit', limitQuery, 20);
     const offset = parseInteger('offset', offsetQuery, 0);
@@ -80,6 +102,7 @@ export class AppController {
     const bedrooms = bedroomsQuery
       ? parseInteger('bedrooms', bedroomsQuery, 1)
       : null;
+    const sort = sortQuery ? parseSort(sortQuery) : null;
 
     if (limit < 1 || limit > 100) {
       throw new BadRequestException('limit must be between 1 and 100.');
@@ -101,6 +124,7 @@ export class AppController {
       maxPrice,
       guests,
       bedrooms,
+      sort,
     );
   }
 }

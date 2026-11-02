@@ -22,6 +22,30 @@ type ListingsPage = {
   items: ListingSummary[];
 };
 
+export type ListingSort =
+  | 'name_asc'
+  | 'price_asc'
+  | 'price_desc'
+  | 'rating_desc';
+
+export function listingOrderBy(sort: ListingSort | null): string {
+  switch (sort) {
+    case 'price_asc':
+      return '"priceValue" asc nulls last, name asc, "listingId" asc';
+    case 'price_desc':
+      return '"priceValue" desc nulls last, name asc, "listingId" asc';
+    case 'rating_desc':
+      return '"reviewScoreValue" desc nulls last, name asc, "listingId" asc';
+    case 'name_asc':
+    case null:
+      return 'name asc, "listingId" asc';
+    default: {
+      const unexpected: never = sort;
+      throw new Error(`Unsupported sort: ${String(unexpected)}`);
+    }
+  }
+}
+
 @Injectable()
 export class AppService implements OnModuleDestroy {
   private readonly pool: Pool;
@@ -80,7 +104,9 @@ export class AppService implements OnModuleDestroy {
     maxPrice: string | null,
     guests: number | null,
     bedrooms: number | null,
+    sort: ListingSort | null,
   ): Promise<ListingsPage> {
+    const orderBy = listingOrderBy(sort);
     const result = await this.pool.query<{
       snapshotDate: string | null;
       total: string;
@@ -105,6 +131,7 @@ export class AppService implements OnModuleDestroy {
            l.price_cad::text as "priceCad",
            l.accommodates,
            l.bedrooms,
+           l.review_scores_rating as "reviewScoreValue",
            l.review_scores_rating::text as "reviewScore"
          from public.listings l
          join latest_snapshot s on s.id = l.snapshot_id
@@ -121,7 +148,9 @@ export class AppService implements OnModuleDestroy {
            "priceCad",
            accommodates,
            bedrooms,
-           "reviewScore"
+           "reviewScore",
+           "priceValue",
+           "reviewScoreValue"
          from all_listings
          where ($2::text is null or neighbourhood = $2)
            and ($3::numeric is null or "priceValue" >= $3)
@@ -130,16 +159,30 @@ export class AppService implements OnModuleDestroy {
            and ($6::integer is null or bedrooms = $6)
        ),
        page as (
-         select *
+         select
+           "listingId",
+           name,
+           "pictureUrl",
+           neighbourhood,
+           "roomType",
+           "propertyType",
+           "priceCad",
+           accommodates,
+           bedrooms,
+           "reviewScore",
+           row_number() over (order by ${orderBy}) as ordinal
          from filtered_listings
-         order by name, "listingId"
+         order by ordinal
          limit $7 offset $8
        )
        select
          (select snapshot_date from latest_snapshot) as "snapshotDate",
          (select count(*)::text from filtered_listings) as total,
          coalesce(
-           (select json_agg(page order by page.name, page."listingId") from page),
+           (
+             select json_agg((to_jsonb(page) - 'ordinal') order by page.ordinal)
+             from page
+           ),
            '[]'::json
          ) as items`,
       ['Inside Airbnb', neighbourhood, minPrice, maxPrice, guests, bedrooms, limit, offset],

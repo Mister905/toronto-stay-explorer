@@ -25,6 +25,23 @@ type ListingsResponse = {
   items: Listing[];
 };
 
+type ListingSort =
+  | "name_asc"
+  | "price_asc"
+  | "price_desc"
+  | "rating_desc";
+
+const sortOptions: { value: ListingSort; label: string }[] = [
+  { value: "name_asc", label: "Name: A to Z" },
+  { value: "price_asc", label: "Price: low to high" },
+  { value: "price_desc", label: "Price: high to low" },
+  { value: "rating_desc", label: "Rating: high to low" },
+];
+
+function isListingSort(value: string): value is ListingSort {
+  return sortOptions.some((option) => option.value === value);
+}
+
 function formatPrice(price: string | null): string {
   if (price === null) return "Price unavailable";
 
@@ -58,6 +75,7 @@ function App() {
     maxPrice: "",
   });
   const [priceError, setPriceError] = useState<string | null>(null);
+  const [sort, setSort] = useState<ListingSort>("name_asc");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -118,6 +136,7 @@ function App() {
       if (bedrooms) {
         url.searchParams.set("bedrooms", bedrooms);
       }
+      url.searchParams.set("sort", sort);
 
       try {
         const response = await fetch(url, { signal: controller.signal });
@@ -149,7 +168,7 @@ function App() {
     void loadListings();
 
     return () => controller.abort();
-  }, [page, reloadKey, selectedNeighbourhood, priceRange, guests, bedrooms]);
+  }, [page, reloadKey, selectedNeighbourhood, priceRange, guests, bedrooms, sort]);
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -260,6 +279,24 @@ function App() {
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((count) => (
                   <option key={count} value={count}>
                     {count}
+                  </option>
+                ))}
+              </select>
+              <label htmlFor="sort-filter">Sort</label>
+              <select
+                id="sort-filter"
+                value={sort}
+                onChange={(event) => {
+                  const nextSort = event.target.value;
+                  if (!isListingSort(nextSort)) return;
+
+                  setPage(0);
+                  setSort(nextSort);
+                }}
+              >
+                {sortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>
