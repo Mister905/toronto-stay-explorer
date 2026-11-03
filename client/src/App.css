@@ -466,9 +466,16 @@
   }
 }
 
-.details-button {
-  width: 100%;
+.listing-actions {
+  display: grid;
+  gap: 8px;
   margin-top: 14px;
+}
+
+.details-button,
+.compare-button,
+.compare-remove,
+.compare-clear {
   padding: 9px 13px;
   border: 1px solid #cdd3cb;
   border-radius: 5px;
@@ -479,8 +486,260 @@
   font-size: 12px;
 }
 
-.details-button:hover {
+.details-button,
+.compare-button {
+  width: 100%;
+}
+
+.details-button:hover,
+.compare-button:hover:not(:disabled),
+.compare-remove:hover,
+.compare-clear:hover {
   border-color: #567461;
+}
+
+.compare-button.is-selected {
+  border-color: #29473b;
+  background: #29473b;
+  color: #fffefa;
+}
+
+.compare-button.is-selected:hover {
+  border-color: #1d3329;
+  background: #1d3329;
+}
+
+.compare-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.listing-card.is-compared {
+  border-color: #29473b;
+}
+
+.results-heading h2:focus {
+  outline: 3px solid #8aa994;
+  outline-offset: 4px;
+}
+
+.compare-panel {
+  min-width: 0;
+  margin: 0 0 28px;
+  padding: 18px 18px 16px;
+  border: 1px solid #e3e4dd;
+  border-radius: 10px;
+  background: #fffefa;
+}
+
+.compare-panel .eyebrow {
+  margin-bottom: 6px;
+}
+
+.compare-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.compare-heading-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.compare-panel h3 {
+  margin: 0;
+  color: #24332c;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: -0.4px;
+}
+
+.compare-count {
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #e7efe8;
+  color: #29473b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.compare-status {
+  max-width: 62ch;
+  margin: 8px 0 0;
+  color: #5e665f;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.compare-clear,
+.compare-remove {
+  flex: 0 0 auto;
+}
+
+.compare-single {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #ecece6;
+}
+
+.compare-single-name {
+  margin: 0;
+  color: #293830;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+.compare-single-meta {
+  margin: 6px 0 0;
+  color: #4d554e;
+  font-size: 13px;
+}
+
+.compare-scroll {
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  container-type: inline-size;
+}
+
+.compare-scroll-hint {
+  display: none;
+  margin: 0 0 8px;
+  color: #72776f;
+  font-size: 12px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.compare-table th,
+.compare-table td {
+  padding: 12px 18px 12px 0;
+  border-bottom: 1px solid #ecece6;
+  color: #293830;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: left;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.compare-table thead td {
+  padding-top: 0;
+  vertical-align: bottom;
+}
+
+.compare-table tbody tr:last-child th,
+.compare-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.compare-table th[scope="row"],
+.compare-table thead td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 148px;
+  min-width: 132px;
+  background: #fffefa;
+}
+
+.compare-table th[scope="row"] {
+  color: #72776f;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.compare-table th[scope="col"],
+.compare-table tbody td,
+.compare-table thead td:not(:first-child) {
+  width: auto;
+}
+
+.compare-table .is-unavailable,
+.compare-single-name.is-unavailable,
+.compare-single-meta .is-unavailable {
+  color: #72776f;
+}
+
+@media (max-width: 760px) {
+  .compare-panel {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .compare-panel-header,
+  .compare-single {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .compare-scroll-hint {
+    display: block;
+  }
+
+  .compare-clear,
+  .compare-single .compare-remove {
+    width: 100%;
+  }
+
+  .compare-panel h3 {
+    font-size: 24px;
+  }
+
+  .compare-table {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .compare-table th[scope="row"],
+  .compare-table thead td:first-child {
+    width: 124px;
+    min-width: 124px;
+    padding-right: 8px;
+    letter-spacing: 0;
+  }
+
+  .compare-table th[scope="col"],
+  .compare-table tbody td,
+  .compare-table thead td:not(:first-child) {
+    width: calc(100cqi - 124px);
+    min-width: calc(100cqi - 124px);
+    max-width: calc(100cqi - 124px);
+  }
 }
 
 .listing-dialog-backdrop {

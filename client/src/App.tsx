@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
+import ComparePanel, {
+  MAX_COMPARED_LISTINGS,
+} from "./ComparePanel.tsx";
 import ListingDetailsDialog from "./ListingDetailsDialog.tsx";
 
 const API_BASE_URL = "http://localhost:3000";
@@ -81,6 +84,8 @@ function App() {
     id: string;
     opener: HTMLElement;
   } | null>(null);
+  const [comparedListings, setComparedListings] = useState<Listing[]>([]);
+  const hadComparisonRef = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -175,6 +180,51 @@ function App() {
     return () => controller.abort();
   }, [page, reloadKey, selectedNeighbourhood, priceRange, guests, bedrooms, sort]);
 
+  useEffect(() => {
+    if (comparedListings.length > 0) {
+      hadComparisonRef.current = true;
+      return;
+    }
+
+    if (!hadComparisonRef.current) return;
+
+    hadComparisonRef.current = false;
+
+    if (document.activeElement === document.body) {
+      document.getElementById("results-heading")?.focus();
+    }
+  }, [comparedListings.length]);
+
+  const compareFull = comparedListings.length >= MAX_COMPARED_LISTINGS;
+
+  const toggleComparedListing = (listing: Listing) => {
+    setComparedListings((current) => {
+      const alreadySelected = current.some(
+        (item) => item.listingId === listing.listingId,
+      );
+
+      if (alreadySelected) {
+        return current.filter((item) => item.listingId !== listing.listingId);
+      }
+
+      if (current.length >= MAX_COMPARED_LISTINGS) {
+        return current;
+      }
+
+      return [...current, listing];
+    });
+  };
+
+  const removeComparedListing = (listingId: string) => {
+    setComparedListings((current) =>
+      current.filter((item) => item.listingId !== listingId),
+    );
+  };
+
+  const clearComparedListings = () => {
+    setComparedListings([]);
+  };
+
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const firstResult = total === 0 ? 0 : page * PAGE_SIZE + 1;
@@ -226,7 +276,9 @@ function App() {
           <div className="results-heading">
             <div>
               <p className="eyebrow">THE COLLECTION</p>
-              <h2 id="results-heading">Stays in Toronto</h2>
+              <h2 id="results-heading" tabIndex={-1}>
+                Stays in Toronto
+              </h2>
             </div>
 
             {!loading && !error && (
@@ -393,6 +445,12 @@ function App() {
             )}
           </form>
 
+          <ComparePanel
+            listings={comparedListings}
+            onRemove={removeComparedListing}
+            onClear={clearComparedListings}
+          />
+
           {loading && (
             <p className="message" role="status">
               Loading listings…
@@ -421,9 +479,22 @@ function App() {
           {!loading && !error && data && data.items.length > 0 && (
             <>
               <ul className="listing-grid">
-                {data.items.map((listing) => (
-                  <li key={listing.listingId}>
-                    <article className="listing-card">
+                {data.items.map((listing) => {
+                  const isCompared = comparedListings.some(
+                    (item) => item.listingId === listing.listingId,
+                  );
+                  const addDisabled = !isCompared && compareFull;
+                  const listingName = listing.name.trim() || "this stay";
+
+                  return (
+                    <li key={listing.listingId}>
+                      <article
+                        className={
+                          isCompared
+                            ? "listing-card is-compared"
+                            : "listing-card"
+                        }
+                      >
                       <div className="listing-image">
                         {listing.pictureUrl ? (
                           <img src={listing.pictureUrl} alt="" loading="lazy" />
@@ -472,22 +543,46 @@ function App() {
                               : `★ ${Number(listing.reviewScore).toFixed(2)}`}
                           </p>
                         </div>
-                        <button
-                          className="details-button"
-                          type="button"
-                          onClick={(event) => {
-                            setSelectedListing({
-                              id: listing.listingId,
-                              opener: event.currentTarget,
-                            });
-                          }}
-                        >
-                          View details
-                        </button>
+                        <div className="listing-actions">
+                          <button
+                            className="details-button"
+                            type="button"
+                            onClick={(event) => {
+                              setSelectedListing({
+                                id: listing.listingId,
+                                opener: event.currentTarget,
+                              });
+                            }}
+                          >
+                            View details
+                          </button>
+                          <button
+                            className={
+                              isCompared
+                                ? "compare-button is-selected"
+                                : "compare-button"
+                            }
+                            type="button"
+                            disabled={addDisabled}
+                            aria-label={
+                              isCompared
+                                ? `Remove ${listingName} from compare`
+                                : addDisabled
+                                  ? `Add ${listingName} to compare. You can compare up to 3 stays.`
+                                  : `Add ${listingName} to compare`
+                            }
+                            onClick={() => toggleComparedListing(listing)}
+                          >
+                            {isCompared
+                              ? "Remove from compare"
+                              : "Add to compare"}
+                          </button>
+                        </div>
                       </div>
                     </article>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
 
               <nav className="pagination" aria-label="Listing pages">
