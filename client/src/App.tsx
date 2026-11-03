@@ -426,6 +426,7 @@ function App() {
               type="button"
               className="clear-filter"
               onClick={() => {
+                setSelectedNeighbourhood("");
                 setMinPriceInput("");
                 setMaxPriceInput("");
                 setPriceRange({ minPrice: "", maxPrice: "" });
