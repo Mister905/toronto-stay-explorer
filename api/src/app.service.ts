@@ -22,6 +22,35 @@ type ListingsPage = {
   items: ListingSummary[];
 };
 
+export type ListingDetail = {
+  listingId: string;
+  name: string;
+  description: string | null;
+  listingUrl: string | null;
+  pictureUrl: string | null;
+  neighbourhood: string | null;
+  roomType: string | null;
+  propertyType: string | null;
+  priceCad: string | null;
+  accommodates: number | null;
+  bedrooms: number | null;
+  beds: number | null;
+  bathroomsText: string | null;
+  amenities: string[];
+  minimumNights: number | null;
+  maximumNights: number | null;
+  availability365: number | null;
+  reviewScore: string | null;
+  cleanlinessRating: string | null;
+  locationRating: string | null;
+};
+
+function readAmenities(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter((item): item is string => typeof item === 'string');
+}
+
 export type ListingSort =
   | 'name_asc'
   | 'price_asc'
@@ -196,6 +225,54 @@ export class AppService implements OnModuleDestroy {
       limit,
       offset,
       items: row.items,
+    };
+  }
+
+  async getListing(listingId: string): Promise<ListingDetail | null> {
+    const result = await this.pool.query<
+      Omit<ListingDetail, 'amenities'> & { amenities: unknown }
+    >(
+      `with latest_snapshot as (
+         select id
+         from public.dataset_snapshots
+         where source = $1
+         order by snapshot_date desc, id desc
+         limit 1
+       )
+       select
+         l.source_listing_id::text as "listingId",
+         l.name,
+         l.description,
+         l.listing_url as "listingUrl",
+         l.picture_url as "pictureUrl",
+         n.name as neighbourhood,
+         l.room_type as "roomType",
+         l.property_type as "propertyType",
+         l.price_cad::text as "priceCad",
+         l.accommodates,
+         l.bedrooms,
+         l.beds,
+         l.bathrooms_text as "bathroomsText",
+         l.amenities,
+         l.minimum_nights as "minimumNights",
+         l.maximum_nights as "maximumNights",
+         l.availability_365 as "availability365",
+         l.review_scores_rating::text as "reviewScore",
+         l.review_scores_cleanliness::text as "cleanlinessRating",
+         l.review_scores_location::text as "locationRating"
+       from public.listings l
+       join latest_snapshot s on s.id = l.snapshot_id
+       left join public.neighbourhoods n on n.id = l.neighbourhood_id
+       where l.source_listing_id = $2::bigint`,
+      ['Inside Airbnb', listingId],
+    );
+
+    const row = result.rows[0];
+    if (!row) return null;
+
+    return {
+      ...row,
+      amenities: readAmenities(row.amenities),
     };
   }
 

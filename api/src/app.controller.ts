@@ -1,4 +1,11 @@
-import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Query,
+} from '@nestjs/common';
 import { AppService, type ListingSort } from './app.service.js';
 
 function parseInteger(
@@ -44,6 +51,25 @@ const sortOptions: readonly ListingSort[] = [
   'price_desc',
   'rating_desc',
 ];
+
+const BIGINT_MAX = '9223372036854775807';
+
+function parseListingId(value: string): string {
+  if (!/^\d+$/.test(value)) {
+    throw new BadRequestException('listingId must contain only digits.');
+  }
+
+  const normalized = value.replace(/^0+/, '') || '0';
+
+  if (
+    normalized.length > BIGINT_MAX.length ||
+    (normalized.length === BIGINT_MAX.length && normalized > BIGINT_MAX)
+  ) {
+    throw new BadRequestException('listingId is too large.');
+  }
+
+  return value;
+}
 
 function parseSort(value: string | undefined): ListingSort {
   if (value === undefined || value === 'name_asc') {
@@ -126,5 +152,17 @@ export class AppController {
       bedrooms,
       sort,
     );
+  }
+
+  @Get('listings/:listingId')
+  async getListing(@Param('listingId') listingId: string) {
+    const parsedListingId = parseListingId(listingId);
+    const listing = await this.appService.getListing(parsedListingId);
+
+    if (!listing) {
+      throw new NotFoundException('Listing not found.');
+    }
+
+    return listing;
   }
 }

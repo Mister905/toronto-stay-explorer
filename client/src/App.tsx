@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./App.css";
+import ListingDetailsDialog from "./ListingDetailsDialog.tsx";
 
 const API_BASE_URL = "http://localhost:3000";
 const PAGE_SIZE = 12;
@@ -76,6 +77,10 @@ function App() {
   });
   const [priceError, setPriceError] = useState<string | null>(null);
   const [sort, setSort] = useState<ListingSort>("name_asc");
+  const [selectedListing, setSelectedListing] = useState<{
+    id: string;
+    opener: HTMLElement;
+  } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -176,7 +181,8 @@ function App() {
   const lastResult = Math.min((page + 1) * PAGE_SIZE, total);
 
   return (
-    <div className="app-shell">
+    <>
+    <div className="app-shell" inert={selectedListing !== null}>
       <header className="site-header">
         <a
           className="wordmark"
@@ -300,6 +306,11 @@ function App() {
                   </option>
                 ))}
               </select>
+              {neighbourhoodError && (
+                <p className="filter-error" role="alert">
+                  {neighbourhoodError}
+                </p>
+              )}
             </div>
           </div>
 
@@ -461,6 +472,18 @@ function App() {
                               : `★ ${Number(listing.reviewScore).toFixed(2)}`}
                           </p>
                         </div>
+                        <button
+                          className="details-button"
+                          type="button"
+                          onClick={(event) => {
+                            setSelectedListing({
+                              id: listing.listingId,
+                              opener: event.currentTarget,
+                            });
+                          }}
+                        >
+                          View details
+                        </button>
                       </div>
                     </article>
                   </li>
@@ -517,6 +540,14 @@ function App() {
         </p>
       </footer>
     </div>
+    {selectedListing && (
+      <ListingDetailsDialog
+        listingId={selectedListing.id}
+        returnFocusTo={selectedListing.opener}
+        onClose={() => setSelectedListing(null)}
+      />
+    )}
+    </>
   );
 }
 
