@@ -288,8 +288,11 @@ function App() {
                   : `Showing ${firstResult}–${lastResult} of ${total.toLocaleString("en-CA")}`}
               </p>
             )}
-            <div className="results-controls">
-              <label htmlFor="neighbourhood-filter">Neighbourhood</label>
+          </div>
+
+          <div className="search-tool" role="group" aria-label="Filter listings">
+            <label className="search-field field-neighbourhood" htmlFor="neighbourhood-filter">
+              Neighbourhood
               <select
                 id="neighbourhood-filter"
                 value={selectedNeighbourhood}
@@ -305,7 +308,10 @@ function App() {
                   </option>
                 ))}
               </select>
-              <label htmlFor="guests-filter">Guests</label>
+            </label>
+
+            <label className="search-field field-guests" htmlFor="guests-filter">
+              Guests
               <select
                 id="guests-filter"
                 value={guests}
@@ -322,8 +328,10 @@ function App() {
                 ))}
                 <option value="9">9+</option>
               </select>
+            </label>
 
-              <label htmlFor="bedrooms-filter">Bedrooms</label>
+            <label className="search-field field-bedrooms" htmlFor="bedrooms-filter">
+              Bedrooms
               <select
                 id="bedrooms-filter"
                 value={bedrooms}
@@ -340,7 +348,10 @@ function App() {
                   </option>
                 ))}
               </select>
-              <label htmlFor="sort-filter">Sort</label>
+            </label>
+
+            <label className="search-field field-sort" htmlFor="sort-filter">
+              Sort
               <select
                 id="sort-filter"
                 value={sort}
@@ -358,93 +369,95 @@ function App() {
                   </option>
                 ))}
               </select>
-              {neighbourhoodError && (
-                <p className="filter-error" role="alert">
-                  {neighbourhoodError}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <form
-            className="price-filter"
-            onSubmit={(event) => {
-              event.preventDefault();
-
-              if (
-                minPriceInput &&
-                maxPriceInput &&
-                Number(minPriceInput) > Number(maxPriceInput)
-              ) {
-                setPriceError("Minimum price cannot exceed maximum price.");
-                return;
-              }
-
-              setPriceError(null);
-              setPage(0);
-              setPriceRange({
-                minPrice: minPriceInput.trim(),
-                maxPrice: maxPriceInput.trim(),
-              });
-            }}
-          >
-            <label>
-              Minimum price
-              <span className="price-input">
-                <span aria-hidden="true">$</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="99999999.99"
-                  step="0.01"
-                  value={minPriceInput}
-                  onChange={(event) => setMinPriceInput(event.target.value)}
-                  placeholder="Any"
-                />
-              </span>
             </label>
 
-            <label>
-              Maximum price
-              <span className="price-input">
-                <span aria-hidden="true">$</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="99999999.99"
-                  step="0.01"
-                  value={maxPriceInput}
-                  onChange={(event) => setMaxPriceInput(event.target.value)}
-                  placeholder="Any"
-                />
-              </span>
-            </label>
+            <form
+              className="price-filter"
+              onSubmit={(event) => {
+                event.preventDefault();
 
-            <button type="submit">Apply price</button>
+                if (
+                  minPriceInput &&
+                  maxPriceInput &&
+                  Number(minPriceInput) > Number(maxPriceInput)
+                ) {
+                  setPriceError("Minimum price cannot exceed maximum price.");
+                  return;
+                }
 
-            <button
-              type="button"
-              className="clear-filter"
-              onClick={() => {
-                setSelectedNeighbourhood("");
-                setMinPriceInput("");
-                setMaxPriceInput("");
-                setPriceRange({ minPrice: "", maxPrice: "" });
                 setPriceError(null);
                 setPage(0);
-                setGuests("");
-                setBedrooms("");
+                setPriceRange({
+                  minPrice: minPriceInput.trim(),
+                  maxPrice: maxPriceInput.trim(),
+                });
               }}
             >
-              Clear
-            </button>
+              <label className="search-field">
+                Minimum price
+                <span className="price-input">
+                  <span aria-hidden="true">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="99999999.99"
+                    step="0.01"
+                    value={minPriceInput}
+                    onChange={(event) => setMinPriceInput(event.target.value)}
+                    placeholder="Any"
+                  />
+                </span>
+              </label>
 
-            {priceError && (
-              <p className="price-error" role="alert">
-                {priceError}
+              <label className="search-field">
+                Maximum price
+                <span className="price-input">
+                  <span aria-hidden="true">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="99999999.99"
+                    step="0.01"
+                    value={maxPriceInput}
+                    onChange={(event) => setMaxPriceInput(event.target.value)}
+                    placeholder="Any"
+                  />
+                </span>
+              </label>
+
+              <div className="search-actions">
+                <button type="submit">Apply price</button>
+                <button
+                  type="button"
+                  className="clear-filter"
+                  onClick={() => {
+                    setSelectedNeighbourhood("");
+                    setMinPriceInput("");
+                    setMaxPriceInput("");
+                    setPriceRange({ minPrice: "", maxPrice: "" });
+                    setPriceError(null);
+                    setPage(0);
+                    setGuests("");
+                    setBedrooms("");
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+
+              {priceError && (
+                <p className="price-error" role="alert">
+                  {priceError}
+                </p>
+              )}
+            </form>
+
+            {neighbourhoodError && (
+              <p className="filter-error" role="alert">
+                {neighbourhoodError}
               </p>
             )}
-          </form>
+          </div>
 
           <ComparePanel
             listings={comparedListings}
@@ -486,6 +499,9 @@ function App() {
                   );
                   const addDisabled = !isCompared && compareFull;
                   const listingName = listing.name.trim() || "this stay";
+                  const priceKnown =
+                    listing.priceCad !== null &&
+                    Number.isFinite(Number(listing.priceCad));
 
                   return (
                     <li key={listing.listingId}>
@@ -534,11 +550,23 @@ function App() {
                         </div>
 
                         <div className="listing-footer">
-                          <p className="listing-price">
+                          <p
+                            className={
+                              priceKnown
+                                ? "listing-price"
+                                : "listing-price is-unavailable"
+                            }
+                          >
                             <strong>{formatPrice(listing.priceCad)}</strong>
                             {listing.priceCad !== null && <span> / night</span>}
                           </p>
-                          <p className="listing-rating">
+                          <p
+                            className={
+                              listing.reviewScore === null
+                                ? "listing-rating is-unavailable"
+                                : "listing-rating"
+                            }
+                          >
                             {listing.reviewScore === null
                               ? "Not yet rated"
                               : `★ ${Number(listing.reviewScore).toFixed(2)}`}
