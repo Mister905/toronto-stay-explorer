@@ -1,7 +1,52 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller.js';
 import { AppService, listingOrderBy } from './app.service.js';
+
+interface ListingsQuery {
+  limit?: string;
+  offset?: string;
+  neighbourhood?: string;
+  minPrice?: string;
+  maxPrice?: string;
+  guests?: string;
+  bedrooms?: string;
+  sort?: string;
+}
+
+const emptyListingsPage = {
+  snapshotDate: null,
+  total: 0,
+  limit: 20,
+  offset: 0,
+  items: [],
+};
+
+function requestListings(controller: AppController, query: ListingsQuery = {}) {
+  return controller.getListings(
+    query.limit,
+    query.offset,
+    query.neighbourhood,
+    query.minPrice,
+    query.maxPrice,
+    query.guests,
+    query.bedrooms,
+    query.sort,
+  );
+}
+
+function expectBadRequest(action: () => unknown, message: string): void {
+  let thrown: unknown;
+
+  try {
+    action();
+  } catch (error) {
+    thrown = error;
+  }
+
+  expect(thrown).toBeInstanceOf(BadRequestException);
+  expect((thrown as BadRequestException).message).toBe(message);
+}
 
 describe('AppController', () => {
   let appController: AppController;
@@ -95,5 +140,174 @@ describe('listing sort', () => {
         'newest',
       ),
     ).toThrow(BadRequestException);
+  });
+});
+
+describe('listing filters', () => {
+  let controller: AppController;
+  let getListings: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    getListings = vi.fn().mockResolvedValue(emptyListingsPage);
+    const moduleRef: TestingModule = await Test.createTestingModule({
+      controllers: [AppController],
+      providers: [{ provide: AppService, useValue: { getListings } }],
+    }).compile();
+
+    controller = moduleRef.get(AppController);
+  });
+
+  it('uses default pagination and leaves sort unset when queries are omitted', async () => {
+    await requestListings(controller);
+
+    expect(getListings).toHaveBeenCalledWith(
+      20,
+      0,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+    );
+  });
+
+  it('passes parsed filters to the service', async () => {
+    await requestListings(controller, {
+      limit: '25',
+      offset: '40',
+      neighbourhood: '  Kensington-Chinatown  ',
+      minPrice: '100.50',
+      maxPrice: '250',
+      guests: '4',
+      bedrooms: '2',
+    });
+
+    expect(getListings).toHaveBeenCalledWith(
+      25,
+      40,
+      'Kensington-Chinatown',
+      '100.50',
+      '250',
+      4,
+      2,
+      null,
+    );
+  });
+
+  it.each([
+    ['0', 'limit must be between 1 and 100.'],
+    ['101', 'limit must be between 1 and 100.'],
+    ['-1', 'limit must be a non-negative integer.'],
+    ['10.5', 'limit must be a non-negative integer.'],
+  ] as const)('rejects limit %s', (limit, message) => {
+    expectBadRequest(() => requestListings(controller, { limit }), message);
+    expect(getListings).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['minPrice', '12.345'],
+    ['minPrice', 'abc'],
+    ['maxPrice', '-20'],
+  ] as const)('rejects %s value %s', (field, value) => {
+    expectBadRequest(
+      () =>
+        requestListings(
+          controller,
+          field === 'minPrice' ? { minPrice: value } : { maxPrice: value },
+        ),
+      `${field} must be a non-negative amount with up to two decimal places.`,
+    );
+    expect(getListings).not.toHaveBeenCalled();
+  });
+
+  it('rejects a minPrice greater than maxPrice', () => {
+    expectBadRequest(
+      () =>
+        requestListings(controller, {
+          minPrice: '200.00',
+          maxPrice: '150',
+        }),
+      'minPrice cannot exceed maxPrice.',
+    );
+    expect(getListings).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['guests', '-1', 'guests must be a non-negative integer.'],
+    ['bedrooms', '1.5', 'bedrooms must be a non-negative integer.'],
+  ] as const)('rejects %s value %s', (field, value, message) => {
+    expectBadRequest(
+      () =>
+        requestListings(
+          controller,
+          field === 'guests' ? { guests: value } : { bedrooms: value },
+        ),
+      message,
+    );
+    expect(getListings).not.toHaveBeenCalled();
+  });
+
+  it('accepts bedrooms=0 for a studio', async () => {
+    await requestListings(controller, { bedrooms: '0' });
+
+    expect(getListings).toHaveBeenCalledWith(
+      20,
+      0,
+      null,
+      null,
+      null,
+      null,
+      0,
+      null,
+    );
+  });
+});
+
+describe('listing id', () => {
+  let controller: AppController;
+  let getListing: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    getListing = vi.fn().mockResolvedValue(null);
+    const moduleRef: TestingModule = await Test.createTestingModule({
+      controllers: [AppController],
+      providers: [{ provide: AppService, useValue: { getListing } }],
+    }).compile();
+
+    controller = moduleRef.get(AppController);
+  });
+
+  it.each([
+    ['12a', 'listingId must contain only digits.'],
+    ['9223372036854775808', 'listingId is too large.'],
+  ] as const)('rejects listing id %s', async (listingId, message) => {
+    let thrown: unknown;
+
+    try {
+      await controller.getListing(listingId);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(BadRequestException);
+    expect((thrown as BadRequestException).message).toBe(message);
+    expect(getListing).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when a valid listing id is unknown', async () => {
+    let thrown: unknown;
+
+    try {
+      await controller.getListing('8675309');
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(NotFoundException);
+    expect((thrown as NotFoundException).message).toBe('Listing not found.');
+    expect((thrown as NotFoundException).getStatus()).toBe(404);
+    expect(getListing).toHaveBeenCalledTimes(1);
+    expect(getListing).toHaveBeenCalledWith('8675309');
   });
 });
