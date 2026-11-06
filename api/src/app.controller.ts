@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { AppService, type ListingSort } from './app.service.js';
 
+// Query values arrive as strings. Only a non-negative integer continues to the service.
 function parseInteger(
   name: string,
   value: string | undefined,
@@ -28,6 +29,10 @@ function parseInteger(
   return parsed;
 }
 
+// Keep a valid amount as text. JavaScript Number is binary floating point, so
+// 19.99 can change before it is sent. The listings query binds this string as
+// numeric, and PostgreSQL parses the original decimal. Number() below only
+// rejects amounts that are too large.
 function parsePrice(name: string, value: string | undefined): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
@@ -52,13 +57,19 @@ const sortOptions: readonly ListingSort[] = [
   'rating_desc',
 ];
 
+// PostgreSQL bigint upper bound, compared as text. Number() would lose precision.
 const BIGINT_MAX = '9223372036854775807';
 
+// Reject non-digits and out-of-range ids. Leading zeros matter only for that check.
 function parseListingId(value: string): string {
   if (!/^\d+$/.test(value)) {
     throw new BadRequestException('listingId must contain only digits.');
   }
 
+  // Drop leading zeros so the range check sees the number, not the padding.
+  // "009223372036854775807" is the maximum bigint with two extra zeros. Left
+  // as-is, those 21 digits look too long and a valid id is rejected. A string
+  // of only zeros becomes "0". The original id is still returned below.
   const normalized = value.replace(/^0+/, '') || '0';
 
   if (
@@ -71,6 +82,7 @@ function parseListingId(value: string): string {
   return value;
 }
 
+// Allowlist only. An unknown sort is a 400 and never becomes SQL.
 function parseSort(value: string | undefined): ListingSort {
   if (value === undefined || value === 'name_asc') {
     return 'name_asc';
@@ -128,8 +140,10 @@ export class AppController {
     const bedrooms = bedroomsQuery
       ? parseInteger('bedrooms', bedroomsQuery, 1)
       : null;
+    // Omitted sort stays null. The service orders that the same way as name_asc.
     const sort = sortQuery ? parseSort(sortQuery) : null;
 
+    // The client asks for 12. An omitted limit defaults to 20 and must be 1–100.
     if (limit < 1 || limit > 100) {
       throw new BadRequestException('limit must be between 1 and 100.');
     }
@@ -154,6 +168,7 @@ export class AppController {
     );
   }
 
+  // A valid id with no row in the latest snapshot is a 404, not an empty 200.
   @Get('listings/:listingId')
   async getListing(@Param('listingId') listingId: string) {
     const parsedListingId = parseListingId(listingId);

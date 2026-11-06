@@ -1,3 +1,4 @@
+// Controller tests supply a fake AppService, so they never open PostgreSQL or read DATABASE_URL.
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller.js';
@@ -72,6 +73,7 @@ describe('AppController', () => {
   });
 });
 
+// The sort clause is a fixed mapping. The controller forwards only an allowlisted value.
 describe('listing sort', () => {
   it('orders by name when sort is omitted', () => {
     expect(listingOrderBy(null)).toBe('name asc, "listingId" asc');
@@ -143,6 +145,7 @@ describe('listing sort', () => {
   });
 });
 
+// Valid filters are parsed and passed through. Invalid input is rejected before the service.
 describe('listing filters', () => {
   let controller: AppController;
   let getListings: ReturnType<typeof vi.fn>;
@@ -264,6 +267,7 @@ describe('listing filters', () => {
   });
 });
 
+// Non-digits and ids past bigint are rejected. A valid unknown id becomes the controller 404.
 describe('listing id', () => {
   let controller: AppController;
   let getListing: ReturnType<typeof vi.fn>;

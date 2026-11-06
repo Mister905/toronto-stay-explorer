@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
+// A second request for one listing. Description, amenities, and availability are not on the card.
 const API_BASE_URL = "http://localhost:3000";
 
+// App mounts this while a card is selected. listingId is the stay to load.
+// onClose clears that selection. returnFocusTo is the button that opened the dialog.
 interface ListingDetailsDialogProps {
   listingId: string;
   onClose: () => void;
@@ -49,10 +52,14 @@ function formatPrice(price: string | null): string {
   }).format(amount);
 }
 
+// Scores arrive as strings. Convert them to numbers so valid scores can be
+// displayed consistently with a star and two decimal places. Missing or
+// unreadable scores display as “Not yet rated.”
 function formatRating(score: string | null): string {
   if (score === null) return "Not yet rated";
 
   const value = Number(score);
+  // Number("abc") is NaN. Leave that as "Not yet rated" instead of a star rating.
   if (!Number.isFinite(value)) return "Not yet rated";
 
   return `★ ${value.toFixed(2)}`;
@@ -73,6 +80,7 @@ function formatCount(
   return value === 1 ? `1 ${singular}` : `${value} ${singular}s`;
 }
 
+// Show the source link only for http or https. Drop other schemes and invalid URLs.
 function sourceUrl(value: string | null): string | null {
   if (!value) return null;
 
@@ -88,6 +96,12 @@ function sourceUrl(value: string | null): string | null {
   return null;
 }
 
+// response.json() is untyped, so this checks the payload before it is rendered.
+// listingId and name must be strings. The other text and number fields may be
+// null, which the dialog shows as missing, but a value of the wrong type fails
+// the check. Amenities must be an array of strings; an empty array is allowed.
+// A failed check becomes the "incomplete" error instead of a partial listing.
+// This checks types only, not ranges such as a rating from 0 to 5.
 function isListingDetails(value: unknown): value is ListingDetails {
   if (typeof value !== "object" || value === null) return false;
 
@@ -127,11 +141,13 @@ function isListingDetails(value: unknown): value is ListingDetails {
   );
 }
 
+// Links and enabled buttons inside the dialog, in tab order. Those are the
+// controls this dialog can focus: Close, Try again, and the source link when
+// it is shown. The Tab handler uses the first and last to wrap focus inside
+// the dialog. Without this list, Tab would move into the page behind it.
 function focusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(
-    container.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
-    ),
+    container.querySelectorAll<HTMLElement>("a[href], button:not([disabled])"),
   );
 }
 
@@ -140,20 +156,33 @@ const ListingDetailsDialog = ({
   onClose,
   returnFocusTo,
 }: ListingDetailsDialogProps) => {
+  // React stores the dialog's div here. The component uses it to find the
+  // dialog's controls and keep keyboard focus inside the dialog.
   const dialogRef = useRef<HTMLDivElement>(null);
+
+  // React stores the Close button here so the component can focus it when
+  // the dialog opens.
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // The Escape-key listener calls the latest onClose callback from this ref.
+  // This lets the callback change without rebuilding the listener.
   const onCloseRef = useRef(onClose);
   const [reloadKey, setReloadKey] = useState(0);
   const [state, setState] = useState<DetailsState>({ status: "loading" });
 
+  // The keyboard listener is not rebound every render, so it calls the latest onClose.
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
 
   useEffect(() => {
+    // Save the opener and current page scroll setting so both can be restored
+    // when the dialog closes.
     const focusTarget = returnFocusTo;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+
+    // Put keyboard focus on Close when the dialog opens.
     closeButtonRef.current?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -175,6 +204,8 @@ const ListingDetailsDialog = ({
       const last = items[items.length - 1];
       const active = document.activeElement;
 
+      // Keep Tab inside the dialog by wrapping focus between its last and first
+      // controls.
       if (event.shiftKey && (active === first || active === document.body)) {
         event.preventDefault();
         last.focus();
@@ -189,6 +220,9 @@ const ListingDetailsDialog = ({
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previousOverflow;
+
+      // Wait for this dialog to leave the page before restoring focus. If another
+      // dialog is open, leave focus there instead.
       window.setTimeout(() => {
         if (document.querySelector('[role="dialog"]')) return;
         focusTarget?.focus();
@@ -196,6 +230,10 @@ const ListingDetailsDialog = ({
     };
   }, [returnFocusTo]);
 
+  // Fetch this listing. A new id or Try again aborts the previous request, and
+  // that abort is ignored so it cannot overwrite the newer result. 400 and 404
+  // get specific messages. Any error can be retried. A payload that is not a
+  // listing is rejected.
   useEffect(() => {
     const controller = new AbortController();
 
@@ -246,14 +284,14 @@ const ListingDetailsDialog = ({
     return () => controller.abort();
   }, [listingId, reloadKey]);
 
+  // Render the stay only after a valid payload. Missing fields use fallback
+  // text below. sourceUrl hides a missing or non-http(s) link.
   const listing = state.status === "ready" ? state.listing : null;
   const originalListingUrl = sourceUrl(listing?.listingUrl ?? null);
 
+  // A click on the backdrop closes the dialog. Clicks inside the panel do not.
   return (
-    <div
-      className="listing-dialog-backdrop"
-      onClick={onClose}
-    >
+    <div className="listing-dialog-backdrop" onClick={onClose}>
       <div
         className="listing-dialog"
         role="dialog"

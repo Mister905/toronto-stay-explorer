@@ -6,8 +6,6 @@ A local web app for browsing and comparing Toronto listings from a dated public 
 
 The app shows pages of stays, with filters, sorting, listing details, and a comparison of up to three stays. Prices, ratings, and availability come from the snapshot. They are not live booking information.
 
-For the architecture, interview notes, and a demo script, see [docs/technical-walkthrough.md](docs/technical-walkthrough.md).
-
 ## Stack
 
 - **Client:** React, TypeScript, and Vite in `client/`
@@ -96,21 +94,21 @@ Open [http://localhost:5173](http://localhost:5173). The client has no `start` s
 
 ## Build and test
 
-These scripts exist. Only `npm test` in `api/` was run for this README, on Node v22.12.0.
+These scripts exist. On 2026-11-04, `npm test` from `api/` was run with Vitest 4.1.12 on Node 22.23.4. That unit run reported 1 file passed and 21 tests passed. It did not include the e2e test. The other commands below were not run for this README.
 
 | Command | Where | What it does | Checked |
 | --- | --- | --- | --- |
 | `npm run build` | `api/` | `nest build` | Not run |
 | `npm run build` | `client/` | Typecheck and Vite build | Not run |
 | `npm run lint` | `api/` or `client/` | Oxlint | Not run |
-| `npm test` | `api/` | Vitest unit tests | Run. 4 passed, 1 failed |
+| `npm test` | `api/` | Vitest unit tests | Run on 2026-11-04. 1 file passed, 21 tests passed. E2e not included |
 | `npm run test:e2e` | `api/` | One `GET /` test that boots the real app module | Not run |
 | `npm run test:cov` | `api/` | Unit tests with coverage | Not run |
 | `npm run preview` | `client/` | Serves the client production build | Not run |
 
 The client has no test script.
 
-The failed unit test is `should return "Hello World!"`. That case constructs `AppService`, and Vitest does not load `api/.env`, so the test process had no `DATABASE_URL`. The four sort tests passed. `npm run test:e2e` uses the same pattern: its config does not load `.env`, and it needs `DATABASE_URL` because it starts `AppModule`.
+`npm run test:e2e` was not part of that unit run. It boots the real app module, its config does not load `.env`, and it needs `DATABASE_URL`.
 
 ## Current scope and limitations
 

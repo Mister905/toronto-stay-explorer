@@ -1,3 +1,4 @@
+-- One imported file. The same source and date is updated instead of inserted again.
 create table dataset_snapshots (
   id bigint generated always as identity primary key,
   source text not null,
@@ -7,6 +8,7 @@ create table dataset_snapshots (
   unique (source, snapshot_date)
 );
 
+-- Each neighbourhood name is stored once. Listings refer to that row by id instead of copying the name.
 create table neighbourhoods (
   id bigint generated always as identity primary key,
   name text not null unique
@@ -33,6 +35,7 @@ create table listings (
   bathrooms_text text,
 
   price_cad numeric(10, 2),
+  -- jsonb keeps the amenity list as JSON. Null is allowed; any other value must be an array.
   amenities jsonb,
 
   minimum_nights integer,
@@ -50,11 +53,16 @@ create table listings (
   last_review date,
   last_scraped date,
 
+  -- source_listing_id is unique within one snapshot. The same listing can be
+  -- stored again under another snapshot_id, so both columns form the primary key.
   primary key (snapshot_id, source_listing_id),
 
+  -- These checks bound a value only when one is present. "is null or" states that
+  -- a missing value is allowed. A null check result also passes in PostgreSQL.
   check (latitude is null or latitude between -90 and 90),
   check (longitude is null or longitude between -180 and 180),
   check (accommodates is null or accommodates >= 1),
+  -- Bedrooms may be 0: a studio is a listing, not missing data.
   check (bedrooms is null or bedrooms >= 0),
   check (beds is null or beds >= 1),
   check (price_cad is null or price_cad >= 0),
@@ -71,6 +79,8 @@ create table listings (
   check (amenities is null or jsonb_typeof(amenities) = 'array')
 );
 
+-- Find listings in one snapshot by neighbourhood, price, or room type.
+-- snapshot_id leads each index, so the lookup stays inside that snapshot.
 create index listings_snapshot_neighbourhood_idx
   on listings (snapshot_id, neighbourhood_id);
 

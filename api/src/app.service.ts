@@ -45,6 +45,7 @@ export type ListingDetail = {
   locationRating: string | null;
 };
 
+// jsonb arrives untyped. Keep only strings before the dialog lists amenities.
 function readAmenities(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
 
@@ -57,6 +58,10 @@ export type ListingSort =
   | 'price_desc'
   | 'rating_desc';
 
+// Turn an allowlisted sort into one fixed ORDER BY clause. The caller's text is
+// not copied in. SQL cannot bind ASC or DESC, so this fragment is interpolated
+// later. null uses the same order as name_asc. Price and rating place missing
+// values last, then name and listing id.
 export function listingOrderBy(sort: ListingSort | null): string {
   switch (sort) {
     case 'price_asc':
@@ -75,6 +80,7 @@ export function listingOrderBy(sort: ListingSort | null): string {
   }
 }
 
+// Runs the listing reads. The controller validates arguments before they arrive.
 @Injectable()
 export class AppService implements OnModuleDestroy {
   private readonly pool: Pool;
@@ -86,6 +92,9 @@ export class AppService implements OnModuleDestroy {
       throw new Error('DATABASE_URL is missing. Add it to api/.env.');
     }
 
+    // One pool for the process. DATABASE_URL comes from api/.env. Traffic is
+    // encrypted, but rejectUnauthorized: false does not verify the database
+    // server's certificate.
     this.pool = new Pool({
       connectionString,
       ssl: { rejectUnauthorized: false },
@@ -104,7 +113,8 @@ export class AppService implements OnModuleDestroy {
     return result.rows[0];
   }
 
-  // Return neighbourhoods that have listings in the latest snapshot.
+  // Read neighbourhood names that have listings in the latest Inside Airbnb
+  // snapshot. Names with no listings in that snapshot are left out.
   async getNeighbourhoods(): Promise<string[]> {
     const result = await this.pool.query<{ name: string }>(
       `with latest_snapshot as (
@@ -125,6 +135,11 @@ export class AppService implements OnModuleDestroy {
     return result.rows.map((row) => row.name);
   }
 
+  // Read one page from the latest Inside Airbnb snapshot. Select that snapshot,
+  // apply neighbourhood, price, guests, and bedrooms, then sort and keep
+  // limit/offset. The response also includes the filtered total and the
+  // snapshot date. A null filter is ignored. orderBy is the fixed clause from
+  // listingOrderBy, not the caller's raw sort text.
   async getListings(
     limit: number,
     offset: number,
@@ -142,6 +157,7 @@ export class AppService implements OnModuleDestroy {
       items: ListingSummary[];
     }>(
       `with latest_snapshot as (
+         -- Newest Inside Airbnb row in dataset_snapshots.
          select id, snapshot_date::text as snapshot_date
          from public.dataset_snapshots
          where source = $1
@@ -149,6 +165,7 @@ export class AppService implements OnModuleDestroy {
          limit 1
        ),
        all_listings as (
+         -- Card fields for that snapshot. The id and the displayed price stay text.
          select
            l.source_listing_id::text as "listingId",
            l.name,
@@ -167,6 +184,8 @@ export class AppService implements OnModuleDestroy {
          left join public.neighbourhoods n on n.id = l.neighbourhood_id
        ),
        filtered_listings as (
+         -- A null parameter skips that filter. Guests means at least that many.
+         -- Bedrooms is an exact match. Prices stay text until this numeric cast.
          select
            "listingId",
            name,
@@ -188,6 +207,7 @@ export class AppService implements OnModuleDestroy {
            and ($6::integer is null or bedrooms = $6)
        ),
        page as (
+         -- Sort the filtered rows, then return one page.
          select
            "listingId",
            name,
@@ -221,6 +241,7 @@ export class AppService implements OnModuleDestroy {
 
     return {
       snapshotDate: row.snapshotDate,
+      // Count comes back as text. It is the filtered total, not the page length.
       total: Number(row.total),
       limit,
       offset,
@@ -228,6 +249,9 @@ export class AppService implements OnModuleDestroy {
     };
   }
 
+  // Read one listing from that same latest snapshot, including description,
+  // amenities, and availability. Returns null when this snapshot has no such
+  // id. The id stays text here and is cast to bigint in SQL.
   async getListing(listingId: string): Promise<ListingDetail | null> {
     const result = await this.pool.query<
       Omit<ListingDetail, 'amenities'> & { amenities: unknown }
@@ -276,6 +300,7 @@ export class AppService implements OnModuleDestroy {
     };
   }
 
+  // Release the pool when the shutdown hooks from main.ts run.
   async onModuleDestroy(): Promise<void> {
     await this.pool.end();
   }
