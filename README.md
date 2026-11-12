@@ -109,17 +109,3 @@ These scripts exist. On 2026-11-04, `npm test` from `api/` was run with Vitest 4
 The client has no test script.
 
 `npm run test:e2e` was not part of that unit run. It boots the real app module, its config does not load `.env`, and it needs `DATABASE_URL`.
-
-## Current scope and limitations
-
-The app runs locally. The client API address and the CORS origin are hardcoded to localhost. Nothing in this repository is a deployed environment. `api` includes a Nest `deploy` script; that is not a deployment of this project.
-
-`002_enable_rls.sql` enables row level security and does not add policies. The API and the importer connect with `ssl: { rejectUnauthorized: false }`.
-
-These ideas are not built. They are optional later work, not completed features and not employer requirements:
-
-- property-type filter
-- rating filter
-- amenity comparison
-- market insights
-- deployment

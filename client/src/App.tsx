@@ -62,6 +62,19 @@ function formatPrice(price: string | null): string {
   }).format(amount);
 }
 
+function formatGuestCapacity(accommodates: number | null): string {
+  if (accommodates === null) return "Guest capacity unavailable";
+  return accommodates === 1
+    ? "Up to 1 guest"
+    : `Up to ${accommodates} guests`;
+}
+
+function formatCardBedrooms(bedrooms: number | null): string {
+  if (bedrooms === null) return "Bedrooms unavailable";
+  if (bedrooms === 0) return "Studio";
+  return bedrooms === 1 ? "1 bedroom" : `${bedrooms} bedrooms`;
+}
+
 function App() {
   // Zero-based page. The listings request turns it into offset = page * PAGE_SIZE.
   const [page, setPage] = useState(0);
@@ -619,18 +632,8 @@ function App() {
                             </p>
 
                             <div className="listing-facts">
-                              <span>
-                                {listing.accommodates === null
-                                  ? "Guest capacity unavailable"
-                                  : `Up to ${listing.accommodates} guests`}
-                              </span>
-                              <span>
-                                {listing.bedrooms === null
-                                  ? "Bedrooms unavailable"
-                                  : listing.bedrooms === 0
-                                    ? "Studio"
-                                    : `${listing.bedrooms} bedrooms`}
-                              </span>
+                              <span>{formatGuestCapacity(listing.accommodates)}</span>
+                              <span>{formatCardBedrooms(listing.bedrooms)}</span>
                             </div>
 
                             <div className="listing-footer">
