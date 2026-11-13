@@ -52,8 +52,10 @@ function parsePrice(name: string, value: string | undefined): string | null {
 
 const sortOptions: readonly ListingSort[] = [
   'name_asc',
+  'name_desc',
   'price_asc',
   'price_desc',
+  'rating_asc',
   'rating_desc',
 ];
 
@@ -93,7 +95,7 @@ function parseSort(value: string | undefined): ListingSort {
   }
 
   throw new BadRequestException(
-    'sort must be name_asc, price_asc, price_desc, or rating_desc.',
+    'sort must be name_asc, name_desc, price_asc, price_desc, rating_asc, or rating_desc.',
   );
 }
 

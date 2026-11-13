@@ -83,8 +83,55 @@ describe('listing sort', () => {
   it('orders by the selected price or rating column', () => {
     expect(listingOrderBy('price_asc')).toContain('"priceValue" asc');
     expect(listingOrderBy('price_desc')).toContain('"priceValue" desc');
+    expect(listingOrderBy('rating_asc')).toBe(
+      '"reviewScoreValue" asc nulls last, name asc, "listingId" asc',
+    );
     expect(listingOrderBy('rating_desc')).toContain('"reviewScoreValue" desc');
   });
+
+  it('orders name from Z to A without changing the listing id tie-break', () => {
+    expect(listingOrderBy('name_desc')).toBe('name desc, "listingId" asc');
+  });
+
+  it.each(['name_desc', 'rating_asc'] as const)(
+    'accepts the inverse sort %s',
+    async (sort) => {
+      const getListings = vi.fn().mockResolvedValue({
+        snapshotDate: null,
+        total: 0,
+        limit: 20,
+        offset: 0,
+        items: [],
+      });
+      const app: TestingModule = await Test.createTestingModule({
+        controllers: [AppController],
+        providers: [{ provide: AppService, useValue: { getListings } }],
+      }).compile();
+      const controller = app.get(AppController);
+
+      await controller.getListings(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        sort,
+      );
+
+      expect(getListings).toHaveBeenCalledWith(
+        20,
+        0,
+        null,
+        null,
+        null,
+        null,
+        null,
+        sort,
+      );
+    },
+  );
 
   it('passes one validated sort value to the service', async () => {
     const getListings = vi.fn().mockResolvedValue({

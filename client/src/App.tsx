@@ -30,7 +30,13 @@ type ListingsResponse = {
   items: Listing[];
 };
 
-type ListingSort = "name_asc" | "price_asc" | "price_desc" | "rating_desc";
+type ListingSort =
+  | "name_asc"
+  | "name_desc"
+  | "price_asc"
+  | "price_desc"
+  | "rating_asc"
+  | "rating_desc";
 
 type SortOption = {
   value: ListingSort;
@@ -39,9 +45,11 @@ type SortOption = {
 
 const sortOptions: SortOption[] = [
   { value: "name_asc", label: "Name: A to Z" },
+  { value: "name_desc", label: "Name: Z to A" },
   { value: "price_asc", label: "Price: low to high" },
   { value: "price_desc", label: "Price: high to low" },
   { value: "rating_desc", label: "Rating: high to low" },
+  { value: "rating_asc", label: "Rating: low to high" },
 ];
 
 // Check that the select's value matches one of the available sort options.

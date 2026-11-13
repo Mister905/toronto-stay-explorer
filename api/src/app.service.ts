@@ -54,8 +54,10 @@ function readAmenities(value: unknown): string[] {
 
 export type ListingSort =
   | 'name_asc'
+  | 'name_desc'
   | 'price_asc'
   | 'price_desc'
+  | 'rating_asc'
   | 'rating_desc';
 
 // Turn an allowlisted sort into one fixed ORDER BY clause. The caller's text is
@@ -64,10 +66,14 @@ export type ListingSort =
 // values last, then name and listing id.
 export function listingOrderBy(sort: ListingSort | null): string {
   switch (sort) {
+    case 'name_desc':
+      return 'name desc, "listingId" asc';
     case 'price_asc':
       return '"priceValue" asc nulls last, name asc, "listingId" asc';
     case 'price_desc':
       return '"priceValue" desc nulls last, name asc, "listingId" asc';
+    case 'rating_asc':
+      return '"reviewScoreValue" asc nulls last, name asc, "listingId" asc';
     case 'rating_desc':
       return '"reviewScoreValue" desc nulls last, name asc, "listingId" asc';
     case 'name_asc':
