@@ -64,10 +64,12 @@ export type ListingSort =
 // not copied in. SQL cannot bind ASC or DESC, so this fragment is interpolated
 // later. null uses the same order as name_asc. Price and rating place missing
 // values last, then name and listing id.
+// DEMO [1.29]: Each of the six names maps to one fixed fragment
 export function listingOrderBy(sort: ListingSort | null): string {
   switch (sort) {
     case 'name_desc':
       return 'name desc, "listingId" asc';
+    // DEMO [1.30]: Price low to high; a missing price goes last
     case 'price_asc':
       return '"priceValue" asc nulls last, name asc, "listingId" asc';
     case 'price_desc':
@@ -121,6 +123,7 @@ export class AppService implements OnModuleDestroy {
 
   // Read neighbourhood names that have listings in the latest Inside Airbnb
   // snapshot. Names with no listings in that snapshot are left out.
+  // DEMO [1.17]: Names that have listings in this snapshot
   async getNeighbourhoods(): Promise<string[]> {
     const result = await this.pool.query<{ name: string }>(
       `with latest_snapshot as (
@@ -146,6 +149,7 @@ export class AppService implements OnModuleDestroy {
   // limit/offset. The response also includes the filtered total and the
   // snapshot date. A null filter is ignored. orderBy is the fixed clause from
   // listingOrderBy, not the caller's raw sort text.
+  // DEMO [1.9]: Service reads one page from the latest snapshot
   async getListings(
     limit: number,
     offset: number,
@@ -173,6 +177,7 @@ export class AppService implements OnModuleDestroy {
        all_listings as (
          -- Card fields for that snapshot. The id and the displayed price stay text.
          select
+           -- DEMO [1.49]: Listing id leaves the query as text
            l.source_listing_id::text as "listingId",
            l.name,
            l.picture_url as "pictureUrl",
@@ -206,10 +211,14 @@ export class AppService implements OnModuleDestroy {
            "priceValue",
            "reviewScoreValue"
          from all_listings
+         -- DEMO [1.20]: SQL keeps an exact neighbourhood match
          where ($2::text is null or neighbourhood = $2)
+           -- DEMO [1.32]: Bound price text is compared as numeric
            and ($3::numeric is null or "priceValue" >= $3)
            and ($4::numeric is null or "priceValue" <= $4)
+           -- DEMO [1.35]: Guests is a minimum, so five guests still shows
            and ($5::integer is null or accommodates >= $5)
+           -- DEMO [1.37]: Bedrooms match exactly; studio is zero
            and ($6::integer is null or bedrooms = $6)
        ),
        page as (
@@ -225,6 +234,7 @@ export class AppService implements OnModuleDestroy {
            accommodates,
            bedrooms,
            "reviewScore",
+           -- DEMO [1.31]: ASC and DESC are interpolated, not parameters
            row_number() over (order by ${orderBy}) as ordinal
          from filtered_listings
          order by ordinal
@@ -240,6 +250,7 @@ export class AppService implements OnModuleDestroy {
            ),
            '[]'::json
          ) as items`,
+      // DEMO [1.10]: Values travel separately as $1 through $8
       ['Inside Airbnb', neighbourhood, minPrice, maxPrice, guests, bedrooms, limit, offset],
     );
 
@@ -293,6 +304,7 @@ export class AppService implements OnModuleDestroy {
        from public.listings l
        join latest_snapshot s on s.id = l.snapshot_id
        left join public.neighbourhoods n on n.id = l.neighbourhood_id
+       -- DEMO [1.50]: Details casts the text id back to bigint
        where l.source_listing_id = $2::bigint`,
       ['Inside Airbnb', listingId],
     );

@@ -81,6 +81,7 @@ function formatCount(
 }
 
 // Show the source link only for http or https. Drop other schemes and invalid URLs.
+// DEMO [1.57]: Keep the source link only for http or https
 function sourceUrl(value: string | null): string | null {
   if (!value) return null;
 
@@ -102,6 +103,7 @@ function sourceUrl(value: string | null): string | null {
 // the check. Amenities must be an array of strings; an empty array is allowed.
 // A failed check becomes the "incomplete" error instead of a partial listing.
 // This checks types only, not ranges such as a rating from 0 to 5.
+// DEMO [1.52]: Check types only before rendering the dialog
 function isListingDetails(value: unknown): value is ListingDetails {
   if (typeof value !== "object" || value === null) return false;
 
@@ -183,6 +185,7 @@ const ListingDetailsDialog = ({
     document.body.style.overflow = "hidden";
 
     // Put keyboard focus on Close when the dialog opens.
+    // DEMO [1.53]: On open, focus moves to Close
     closeButtonRef.current?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -206,6 +209,7 @@ const ListingDetailsDialog = ({
 
       // Keep Tab inside the dialog by wrapping focus between its last and first
       // controls.
+      // DEMO [1.54]: Tab and Shift+Tab wrap inside the dialog
       if (event.shiftKey && (active === first || active === document.body)) {
         event.preventDefault();
         last.focus();
@@ -224,6 +228,7 @@ const ListingDetailsDialog = ({
       // Wait for this dialog to leave the page before restoring focus. If another
       // dialog is open, leave focus there instead.
       window.setTimeout(() => {
+        // DEMO [1.55]: Return focus unless another dialog is still open
         if (document.querySelector('[role="dialog"]')) return;
         focusTarget?.focus();
       }, 0);
@@ -235,8 +240,11 @@ const ListingDetailsDialog = ({
   // get specific messages. Any error can be retried. A payload that is not a
   // listing is rejected.
   useEffect(() => {
+    // DEMO [1.45]: Details fetch aborts on its own controller
     const controller = new AbortController();
 
+    // DEMO [1.44]: Second request loads description, amenities, availability
+    // Dialog fetches GET /listings/ plus this id
     async function loadDetails() {
       setState({ status: "loading" });
 
@@ -246,6 +254,7 @@ const ListingDetailsDialog = ({
           { signal: controller.signal },
         );
 
+        // DEMO [1.51]: 404 says not found; 400 says the id is not valid
         if (response.status === 404) {
           throw new Error("This listing could not be found.");
         }
@@ -292,6 +301,7 @@ const ListingDetailsDialog = ({
   // A click on the backdrop closes the dialog. Clicks inside the panel do not.
   return (
     <div className="listing-dialog-backdrop" onClick={onClose}>
+      {/* DEMO [1.56]: Dialog is marked as a modal */}
       <div
         className="listing-dialog"
         role="dialog"
@@ -437,6 +447,7 @@ const ListingDetailsDialog = ({
                 </ul>
               )}
 
+              {/* DEMO [1.58]: Other schemes and bad URLs leave the link out */}
               {originalListingUrl && (
                 <a
                   className="listing-dialog-source"

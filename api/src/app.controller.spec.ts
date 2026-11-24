@@ -193,6 +193,7 @@ describe('listing sort', () => {
 });
 
 // Valid filters are parsed and passed through. Invalid input is rejected before the service.
+// DEMO [2.14]: These tests use a fake service and do not need PostgreSQL
 describe('listing filters', () => {
   let controller: AppController;
   let getListings: ReturnType<typeof vi.fn>;
@@ -346,6 +347,7 @@ describe('listing id', () => {
     expect(getListing).not.toHaveBeenCalled();
   });
 
+  // DEMO [2.15]: 8675309 is a valid id with no row, so the result is 404
   it('returns 404 when a valid listing id is unknown', async () => {
     let thrown: unknown;
 

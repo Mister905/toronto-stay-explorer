@@ -5,11 +5,11 @@ import ListingDetailsDialog from "./ListingDetailsDialog.tsx";
 
 // Local API. It is a different origin from Vite, so CORS in the API must allow it.
 const API_BASE_URL = "http://localhost:3000";
-// The client requests 12 listings per page to fit its card layout; 20 is the
-// API's fallback only when a caller omits the limit.
+// The client requests 12 listings per page to fit its card layout
 const PAGE_SIZE = 12;
 
 type Listing = {
+  // DEMO [1.40]: Card id stays a string, not a JavaScript number
   listingId: string;
   name: string;
   pictureUrl: string | null;
@@ -43,6 +43,7 @@ type SortOption = {
   label: string;
 };
 
+// DEMO [1.26]: Six sort names, including both directions
 const sortOptions: SortOption[] = [
   { value: "name_asc", label: "Name: A to Z" },
   { value: "name_desc", label: "Name: Z to A" },
@@ -52,7 +53,7 @@ const sortOptions: SortOption[] = [
   { value: "rating_asc", label: "Rating: low to high" },
 ];
 
-// Check that the select's value matches one of the available sort options.
+// Type guard: narrows `value` to `ListingSort`
 function isListingSort(value: string): value is ListingSort {
   return sortOptions.some((option) => option.value === value);
 }
@@ -72,11 +73,10 @@ function formatPrice(price: string | null): string {
 
 function formatGuestCapacity(accommodates: number | null): string {
   if (accommodates === null) return "Guest capacity unavailable";
-  return accommodates === 1
-    ? "Up to 1 guest"
-    : `Up to ${accommodates} guests`;
+  return accommodates === 1 ? "Up to 1 guest" : `Up to ${accommodates} guests`;
 }
 
+// DEMO [1.38]: Zero bedrooms is labeled Studio on the card
 function formatCardBedrooms(bedrooms: number | null): string {
   if (bedrooms === null) return "Bedrooms unavailable";
   if (bedrooms === 0) return "Studio";
@@ -103,6 +103,7 @@ function App() {
   const [guests, setGuests] = useState("");
   const [bedrooms, setBedrooms] = useState("");
   // Price inputs stay local until Apply. priceRange is what the listings request uses.
+  // DEMO [1.21]: Typing stays local until Apply updates priceRange
   const [minPriceInput, setMinPriceInput] = useState("");
   const [maxPriceInput, setMaxPriceInput] = useState("");
   const [priceRange, setPriceRange] = useState({
@@ -118,6 +119,8 @@ function App() {
     opener: HTMLElement;
   } | null>(null);
   // Comparison is separate from paging and filters. It is not sent to the API.
+  // DEMO [1.59]: Compare stores the card and sends no request
+  // Selection lives in React state, not the URL
   const [comparedListings, setComparedListings] = useState<Listing[]>([]);
   // Remembers whether the user had selected stays to compare. This history
   // doesn't affect what the page displays, so a ref avoids an extra render.
@@ -130,10 +133,12 @@ function App() {
   useEffect(() => {
     // Cancel this request if its results are no longer needed, such as after the
     // user changes pages or the component unmounts.
+    // DEMO [1.15]: Neighbourhood load aborts on its own controller
     const controller = new AbortController();
 
     async function loadNeighbourhoods() {
       try {
+        // DEMO [1.14]: Menu names come from GET /neighbourhoods
         const response = await fetch(`${API_BASE_URL}/neighbourhoods`, {
           signal: controller.signal,
         });
@@ -166,57 +171,76 @@ function App() {
     return () => controller.abort();
   }, []);
 
-  // Reload listings for the current page, sort, and applied filters. Before each
-  // new run, React calls the cleanup below. That happens when page, sort,
-  // reloadKey, neighbourhood, priceRange, guests, or bedrooms changes. Typed
-  // prices are not included; only the applied priceRange is.
+  // DEMO [1.1]: This effect is the listings request from the demo. Listings reload when the page, sort, reload key, and other applied filters change.
   useEffect(() => {
-    // This run has its own controller. The fetch below receives its signal.
+    /*
+    Create a controller for this request. The fetch uses its signal, and cleanup
+    aborts the controller if these effect values change or the component unmounts.
+  */
+    // DEMO [1.4]: Each run has its own AbortController
     const controller = new AbortController();
 
     async function loadListings() {
       setLoading(true);
       setError(null);
 
-      // Request only the current page instead of sending every matching listing to
-      // the browser. `limit` sets how many listings to return; `offset` tells the API
-      // how many matching listings to skip first. For example, if 30 stays match and
-      // the page size is 12, page 1 uses offset 0 and returns stays 1–12; page 2 uses
-      // offset 12 and returns stays 13–24; page 3 uses offset 24 and returns stays
-      // 25–30. Blank filters are omitted, so the API does not restrict results by
-      // those filters.
+      /*
+      Request only the current page instead of sending every matching listing to
+      the browser. `limit` sets how many listings to return; `offset` tells the API
+      how many matching listings to skip first. For example, if 30 stays match and
+      the page size is 12, page 1 uses offset 0 and returns stays 1–12; page 2 uses
+      offset 12 and returns stays 13–24; page 3 uses offset 24 and returns stays
+      25–30. Blank filters are omitted, so the API does not restrict results by
+      those filters.
+    */
+
+      // DEMO [1.2]: URL params builder
       const offset = page * PAGE_SIZE;
       const url = new URL("/listings", API_BASE_URL);
       url.searchParams.set("limit", String(PAGE_SIZE));
       url.searchParams.set("offset", String(offset));
+      // DEMO [1.19]: Selected neighbourhood is appended to the request
       if (selectedNeighbourhood) {
         url.searchParams.set("neighbourhood", selectedNeighbourhood);
       }
+      // DEMO [1.24]: Only an applied price range is sent
       if (priceRange.minPrice) {
         url.searchParams.set("minPrice", priceRange.minPrice);
       }
       if (priceRange.maxPrice) {
         url.searchParams.set("maxPrice", priceRange.maxPrice);
       }
+      // DEMO [1.33]: Guests 4 sends 4; 9+ sends 9
       if (guests) {
         url.searchParams.set("guests", guests);
       }
+      // DEMO [1.36]: Studio sends 0; two bedrooms sends 2
       if (bedrooms) {
         url.searchParams.set("bedrooms", bedrooms);
       }
+      // DEMO [1.3]: Sort is always sent, starting at name A to Z
       url.searchParams.set("sort", sort);
 
       try {
+        /*
+        Pass this controller's signal to fetch. When cleanup aborts the controller,
+        fetch stops waiting for this request and rejects with an AbortError.
+      */
         const response = await fetch(url, { signal: controller.signal });
 
         if (!response.ok) {
           throw new Error(`The listings API returned ${response.status}.`);
         }
 
+        // DEMO [1.11]: List JSON is cast with no runtime check
         const listings = (await response.json()) as ListingsResponse;
         setData(listings);
       } catch (caughtError) {
-        // The cleanup abort is expected. Do not show it as a loading error.
+        /*
+        Cleanup causes an AbortError when it cancels this request. Ignore that
+        expected cancellation instead of displaying it as a loading error.
+      */
+        // DEMO [1.5]: AbortError is ignored and shows no error
         if (caughtError instanceof Error && caughtError.name === "AbortError") {
           return;
         }
@@ -227,7 +251,11 @@ function App() {
             : "Unable to load listings.",
         );
       } finally {
-        // A newer run has already set loading. This aborted request must not clear it.
+        /*
+        If this request was aborted, a newer effect run may already be loading.
+        Only a request that wasn't aborted should clear the loading indicator.
+      */
+        // DEMO [1.6]: An aborted run must not clear the newer spinner
         if (!controller.signal.aborted) {
           setLoading(false);
         }
@@ -236,7 +264,11 @@ function App() {
 
     void loadListings();
 
-    // Abort this run's request. The next run then fetches with the updated values.
+    /*
+      Abort this run's request when its dependencies change or the component unmounts.
+      The next effect run creates a new controller and fetches with the updated values.
+    */
+    // DEMO [1.7]: Cleanup aborts this request before the next run
     return () => controller.abort();
   }, [
     page,
@@ -266,6 +298,7 @@ function App() {
     }
   }, [comparedListings.length]);
 
+  // DEMO [1.60]: compareFull disables Add on the other cards
   const compareFull = comparedListings.length >= MAX_COMPARED_LISTINGS;
 
   // Store up to three card summaries here. This does not change the listings query.
@@ -279,6 +312,7 @@ function App() {
         return current.filter((item) => item.listingId !== listing.listingId);
       }
 
+      // DEMO [1.61]: A fourth new stay is refused
       if (current.length >= MAX_COMPARED_LISTINGS) {
         return current;
       }
@@ -309,6 +343,7 @@ function App() {
   return (
     <>
       {/* The page behind the details dialog is inert, so keyboard focus stays in the dialog. */}
+      {/* DEMO [1.43]: inert takes the page shell out of use */}
       <div className="app-shell" inert={selectedListing !== null}>
         <header className="site-header">
           <a
@@ -382,6 +417,7 @@ function App() {
                 htmlFor="neighbourhood-filter"
               >
                 Neighbourhood
+                {/* DEMO [1.18]: Choosing the selected neighbourhood resets the page and refetches */}
                 <select
                   id="neighbourhood-filter"
                   value={selectedNeighbourhood}
@@ -451,6 +487,7 @@ function App() {
                   id="sort-filter"
                   value={sort}
                   onChange={(event) => {
+                    // DEMO [1.25]: Sort changes immediately and returns to page one
                     const nextSort = event.target.value;
                     if (!isListingSort(nextSort)) return;
 
@@ -473,6 +510,7 @@ function App() {
                 onSubmit={(event) => {
                   event.preventDefault();
 
+                  // DEMO [1.23]: Minimum above maximum returns before priceRange changes
                   if (
                     minPriceInput &&
                     maxPriceInput &&
@@ -484,6 +522,7 @@ function App() {
 
                   setPriceError(null);
                   setPage(0);
+                  // DEMO [1.22]: Apply copies both prices into the request
                   setPriceRange({
                     minPrice: minPriceInput.trim(),
                     maxPrice: maxPriceInput.trim(),
@@ -524,6 +563,7 @@ function App() {
 
                 <div className="search-actions">
                   <button type="submit">Apply price</button>
+                  {/* DEMO [1.39]: Clear resets filters and leaves the current sort */}
                   <button
                     type="button"
                     className="clear-filter"
@@ -605,6 +645,7 @@ function App() {
 
                     return (
                       <li key={listing.listingId}>
+                        {/* DEMO [1.12]: Card shows photo, facts, price, rating, and actions */}
                         <article
                           className={
                             isCompared
@@ -640,8 +681,12 @@ function App() {
                             </p>
 
                             <div className="listing-facts">
-                              <span>{formatGuestCapacity(listing.accommodates)}</span>
-                              <span>{formatCardBedrooms(listing.bedrooms)}</span>
+                              <span>
+                                {formatGuestCapacity(listing.accommodates)}
+                              </span>
+                              <span>
+                                {formatCardBedrooms(listing.bedrooms)}
+                              </span>
                             </div>
 
                             <div className="listing-footer">
@@ -675,6 +720,8 @@ function App() {
                                 type="button"
                                 onClick={(event) => {
                                   // Open details for this id. Remember the button so closing the dialog can return focus to it.
+                                  // DEMO [1.41]: View details stores this card's id and button
+                                  // Opening stores the id and the opener button
                                   setSelectedListing({
                                     id: listing.listingId,
                                     opener: event.currentTarget,
@@ -764,6 +811,7 @@ function App() {
         </footer>
       </div>
       {/* Mounting the dialog with this id starts its own details request. This page does not fetch the details. */}
+      {/* DEMO [1.42]: Mounting the dialog starts the second request */}
       {selectedListing && (
         <ListingDetailsDialog
           listingId={selectedListing.id} // Identifies which listing's details to load.

@@ -1,37 +1,39 @@
-// Import one dated Inside Airbnb listings file into PostgreSQL.
-//
-// The script locates the project root from its own file path, then opens the
-// gzipped CSV for this snapshot (data/source/toronto-listings-2026-09-16.csv.gz).
-// It also keeps the source name, source URL, and snapshot date for the
-// database record. Importing that same source and date again updates the
-// existing snapshot and its listings.
-//
-// The CSV is read twice as a stream. Streaming decompresses and parses one
-// row at a time, so the whole file does not have to sit in memory.
-//
-// First pass: decompress and parse every row, check the required fields
-// (listing ID, name, neighbourhood, and guest capacity), and collect unique
-// neighbourhood names. No database writes happen during this pass. If the
-// file is empty or any required field is invalid, the import stops here.
-//
-// When validation succeeds, the script takes one database connection and
-// starts a transaction. Inside that transaction it records the snapshot,
-// adds any new neighbourhoods, and loads their database IDs.
-//
-// Second pass: stream the same file again. Each row is converted into a
-// listing and held in a buffer. A full buffer is written with one query,
-// which inserts the row or updates it when that snapshot and listing already
-// exist. Batches are 500 rows. The listings insert uses 30 columns, so 500
-// rows create 15,000 parameters, below PostgreSQL's limit of 65,535
-// parameters in one query. Placeholders such as $1 and $2 point at those
-// values. the values are passed separately from the SQL text, so CSV values
-// are treated as data, not SQL code.
-// A conversion error or a database error stops the stream. The transaction
-// is then rolled back, which discards the snapshot, neighbourhoods, and
-// listings together. If the second pass finishes, the transaction is
-// committed. A successful import then prints the snapshot ID, how many
-// neighbourhoods are available, and how many listings were imported. The
-// connection pool is closed either way.
+/*
+  Import one dated Inside Airbnb listings file into PostgreSQL.
+
+  The script locates the project root from its own file path, then opens the
+  gzipped CSV for this snapshot (data/source/toronto-listings-2026-09-16.csv.gz).
+  It also keeps the source name, source URL, and snapshot date for the
+  database record. Importing that same source and date again updates the
+  existing snapshot and its listings.
+
+  The CSV is read twice as a stream. Streaming decompresses and parses one
+  row at a time, so the whole file does not have to sit in memory.
+
+  First pass: decompress and parse every row, check the required fields
+  (listing ID, name, neighbourhood, and guest capacity), and collect unique
+  neighbourhood names. No database writes happen during this pass. If the
+  file is empty or any required field is invalid, the import stops here.
+
+  When validation succeeds, the script takes one database connection and
+  starts a transaction. Inside that transaction it records the snapshot,
+  adds any new neighbourhoods, and loads their database IDs.
+
+  Second pass: stream the same file again. Each row is converted into a
+  listing and held in a buffer. A full buffer is written with one query,
+  which inserts the row or updates it when that snapshot and listing already
+  exist. Batches are 500 rows. The listings insert uses 30 columns, so 500
+  rows create 15,000 parameters, below PostgreSQL's limit of 65,535
+  parameters in one query. Placeholders such as $1 and $2 point at those
+  values. the values are passed separately from the SQL text, so CSV values
+  are treated as data, not SQL code.
+  A conversion error or a database error stops the stream. The transaction
+  is then rolled back, which discards the snapshot, neighbourhoods, and
+  listings together. If the second pass finishes, the transaction is
+  committed. A successful import then prints the snapshot ID, how many
+  neighbourhoods are available, and how many listings were imported. The
+  connection pool is closed either way.
+*/
 
 // Read files and create the streams needed to process the compressed CSV.
 import { createReadStream } from 'node:fs';
@@ -90,6 +92,7 @@ const sourceUrl =
 // PostgreSQL allows up to 65,535 parameters in one query. Each listing uses
 // 30 parameters—one per column—so a batch of 500 listings uses 15,000.
 // This keeps the batch below the protocol limit.
+// DEMO [2.8]: Five hundred rows stay under the parameter limit
 const batchSize = 500;
 
 // These counters track the first pass through the CSV.
@@ -151,6 +154,7 @@ function nullableBoolean(value) {
 
 // Parse the amenities field from JSON text in the CSV into a JavaScript array.
 // e.g. ["Kitchen", "Washer", "Air conditioning"]
+// DEMO [2.5]: Amenities must parse as a JSON array
 function nullableAmenities(value) {
   const trimmed = value?.trim();
   if (!trimmed) return null;
@@ -164,6 +168,7 @@ function nullableAmenities(value) {
 }
 
 // Convert one CSV row into values matching the listings table columns.
+// DEMO [2.4]: Pass two converts price, reviews, booleans, and amenities
 function listingValues(row, snapshotId, neighbourhoodIds) {
   const neighbourhoodName = row.neighbourhood_cleansed.trim();
   const neighbourhoodId = neighbourhoodIds.get(neighbourhoodName);
@@ -208,6 +213,7 @@ function listingValues(row, snapshotId, neighbourhoodIds) {
 }
 
 // These are the columns in the same order as listingValues().
+// DEMO [2.9]: Thirty columns, one parameter each
 const listingColumns = [
   'snapshot_id',
   'source_listing_id',
@@ -248,6 +254,7 @@ function createListingWriter(client, snapshotId, neighbourhoodIds) {
   let batch = [];
   let listingsWritten = 0;
 
+  // DEMO [2.10]: Placeholders are built in code; values are passed separately
   async function flushBatch() {
     if (batch.length === 0) return;
 
@@ -277,6 +284,7 @@ function createListingWriter(client, snapshotId, neighbourhoodIds) {
     const sql = `
       insert into public.listings (${listingColumns.join(', ')})
       values ${valueGroups.join(', ')}
+      -- DEMO [2.11]: Upsert updates every column except the key pair
       on conflict (snapshot_id, source_listing_id)
       do update set ${updateColumns.join(', ')}
     `;
@@ -309,6 +317,7 @@ function createListingWriter(client, snapshotId, neighbourhoodIds) {
         // Holding the callback applies backpressure, so the stream does not
         // accept more rows until this write completes. A database error is
         // passed to the pipeline through callback(error).
+        // DEMO [2.12]: The stream waits until this batch finishes writing
         if (batch.length >= batchSize) {
           flushBatch().then(
             () => callback(),
@@ -337,6 +346,7 @@ function createListingWriter(client, snapshotId, neighbourhoodIds) {
 }
 
 // A Writable stream receives one parsed CSV row at a time during validation.
+// DEMO [2.1]: Pass one requires id, name, neighbourhood, and guests
 const validateRows = new Writable({
   objectMode: true,
 
@@ -392,6 +402,7 @@ const validateRows = new Writable({
 try {
   // 2. First pass: parse and validate every CSV row before any database writes.
   // No database writes happen until this pass succeeds.
+  // DEMO [2.2]: First pass streams the gzip and writes nothing
   await pipeline(
     createReadStream(sourcePath),
     createGunzip(),
@@ -402,6 +413,7 @@ try {
   console.log(`Rows read: ${rowCount}`);
   console.log(`Rows with invalid required fields: ${invalidCount}`);
 
+  // DEMO [2.3]: An empty file or a failed row stops before BEGIN
   if (rowCount === 0 || invalidCount > 0) {
     throw new Error('Validation failed; database writes were stopped.');
   }
@@ -411,6 +423,7 @@ try {
   const client = await pool.connect();
 
   try {
+    // DEMO [2.6]: One connection starts one transaction
     await client.query('begin');
 
     // 4. Store the snapshot and neighbourhoods, then load their database IDs.
@@ -464,6 +477,7 @@ try {
 
     // 6. Commit on success or roll back on failure. Success path:
     // Commit snapshot, neighbourhood, and listing changes together.
+    // DEMO [2.7]: Nothing from this attempt is readable until commit
     await client.query('commit');
 
     console.log('Snapshot record saved with ID:', snapshotId);
@@ -472,6 +486,8 @@ try {
   } catch (error) {
     // 6. Commit on success or roll back on failure. Failure path:
     // Undo all database changes if any part of the import fails.
+    // DEMO [2.13]: Rollback undoes the snapshot, neighbourhoods, and batches
+    // DEMO [2.16]: This rollback path has not been demonstrated
     await client.query('rollback');
     throw error;
   } finally {

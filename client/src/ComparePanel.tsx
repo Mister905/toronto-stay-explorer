@@ -1,5 +1,6 @@
 // At most three stays, using fields the card already has. This panel does not call the API.
 // App keeps the selected stays and passes them in. This file only renders that list.
+// DEMO [1.62]: The comparison cap is three
 export const MAX_COMPARED_LISTINGS = 3;
 
 // The card fields this panel can show. App stores the whole card, but comparison

@@ -12,7 +12,7 @@ The app shows pages of stays, with filters, sorting, listing details, and a comp
 - **API:** NestJS and TypeScript in `api/`
 - **Database:** PostgreSQL, used here through Supabase. The API connects with the `pg` driver.
 
-The client at [http://localhost:5173](http://localhost:5173) calls the API at `http://localhost:3000`. The API reads the latest Inside Airbnb snapshot. Opening a listing sends a second request. Comparison stays in the browser and does not call the API again.
+The client at [http://localhost:5173](http://localhost:5173) calls the API at `http://localhost:3000`. The API reads the Inside Airbnb snapshot with the newest date already stored in this database. It does not download new files from Inside Airbnb. Opening a listing sends a second request. Comparison stays in the browser and does not call the API again.
 
 ## Features
 
@@ -27,25 +27,21 @@ The client at [http://localhost:5173](http://localhost:5173) calls the API at `h
 
 The records are the Inside Airbnb Toronto listings file dated **2026-09-16**. The importer records that date, the source name Inside Airbnb, and this file URL:
 
-`https://data.insideairbnb.com/canada/on/toronto/2026-09-16/data/listings.csv.gz`
+[https://data.insideairbnb.com/canada/on/toronto/2026-09-16/data/listings.csv.gz](https://data.insideairbnb.com/canada/on/toronto/2026-09-16/data/listings.csv.gz)
 
 The app footer attributes the data to [Inside Airbnb](https://insideairbnb.com/get-the-data/) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Toronto Stay Explorer is an independent project and is not affiliated with Airbnb.
 
-The local CSV belongs at `data/source/toronto-listings-2026-09-16.csv.gz`. That directory is gitignored.
+Download that file and save it as `data/source/toronto-listings-2026-09-16.csv.gz`. `data/source/` is gitignored.
 
 ## Local setup
-
-The repository uses the `master` branch.
 
 ### Prerequisites
 
 - Node.js **22.23.4**, pinned in [`.nvmrc`](.nvmrc). From the repo root, `nvm use` selects it when nvm is installed.
 - npm
 - A PostgreSQL database and its connection string. This project uses Supabase. The password stays in `api/.env`.
-- The schema in `database/migrations/` applied to that database. There is no migration command in `package.json`.
-- The gzipped CSV above, if you need to import.
-
-This README was checked with the shell on Node v22.12.0. That version is older than 22.23.4. The Nest CLI range recorded in `api/package-lock.json` is `^22.22.3 || ^24.15.0 || >=26.0.0`. Use the pinned version before starting the API. The start commands below were not re-run for this edit.
+- The schema in `database/migrations/` applied to that database. The repository has no migration command.
+- The gzipped CSV above, saved at the path in [Data](#data).
 
 ### Install
 
@@ -66,15 +62,26 @@ Set `DATABASE_URL` in `api/.env`. The example file only contains placeholders (`
 
 The API exits on startup if `DATABASE_URL` is missing. It listens on port 3000 unless `PORT` is set. CORS allows `http://localhost:5173` only.
 
+### Apply the schema
+
+Apply the SQL files once, in this order, before the first import. In the Supabase dashboard, open the SQL Editor, paste a file, and run it. Repeat for the next file.
+
+1. `database/migrations/001_initial_schema.sql`
+2. `database/migrations/002_enable_rls.sql`
+
+### Download the listings file
+
+Download the [Inside Airbnb Toronto listings file dated 2026-09-16](https://data.insideairbnb.com/canada/on/toronto/2026-09-16/data/listings.csv.gz) and save it as `data/source/toronto-listings-2026-09-16.csv.gz`, relative to the repository root. Create `data/source/` if it is not there. That directory is gitignored. The importer reads this local file and does not download it.
+
 ### Import
 
-Apply `database/migrations/001_initial_schema.sql` and `database/migrations/002_enable_rls.sql` before the first import. From `api/`, so the script can read `api/.env`:
+From `api/`, so the script can read `api/.env`:
 
 ```bash
 node scripts/import-toronto.mjs
 ```
 
-The import reads the gitignored CSV, validates it, then writes the snapshot. Re-running it updates the same source and date. This command was not run while updating the README.
+The import reads the gitignored CSV, validates it, then writes the snapshot. Re-running it updates the same source and date.
 
 ### Run
 
@@ -94,18 +101,16 @@ Open [http://localhost:5173](http://localhost:5173). The client has no `start` s
 
 ## Build and test
 
-These scripts exist. On 2026-11-04, `npm test` from `api/` was run with Vitest 4.1.12 on Node 22.23.4. That unit run reported 1 file passed and 21 tests passed. It did not include the e2e test. The other commands below were not run for this README.
+These scripts are defined in the package files. This section describes them. It does not report a test run.
 
-| Command | Where | What it does | Checked |
-| --- | --- | --- | --- |
-| `npm run build` | `api/` | `nest build` | Not run |
-| `npm run build` | `client/` | Typecheck and Vite build | Not run |
-| `npm run lint` | `api/` or `client/` | Oxlint | Not run |
-| `npm test` | `api/` | Vitest unit tests | Run on 2026-11-04. 1 file passed, 21 tests passed. E2e not included |
-| `npm run test:e2e` | `api/` | One `GET /` test that boots the real app module | Not run |
-| `npm run test:cov` | `api/` | Unit tests with coverage | Not run |
-| `npm run preview` | `client/` | Serves the client production build | Not run |
+| Command | Where | What it does |
+| --- | --- | --- |
+| `npm run build` | `api/` | `nest build` |
+| `npm run build` | `client/` | Typecheck and Vite build |
+| `npm run lint` | `api/` or `client/` | Oxlint |
+| `npm test` | `api/` | Vitest unit tests (`*.spec.ts`). They use a fake service, so they do not open PostgreSQL. They do not include the e2e test. |
+| `npm run test:e2e` | `api/` | One `GET /` test that boots the real app module. That config does not load `.env`. Starting the app module needs `DATABASE_URL` in the environment. |
+| `npm run test:cov` | `api/` | Unit tests with coverage |
+| `npm run preview` | `client/` | Serves the client production build |
 
 The client has no test script.
-
-`npm run test:e2e` was not part of that unit run. It boots the real app module, its config does not load `.env`, and it needs `DATABASE_URL`.

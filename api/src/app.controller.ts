@@ -60,9 +60,11 @@ const sortOptions: readonly ListingSort[] = [
 ];
 
 // PostgreSQL bigint upper bound, compared as text. Number() would lose precision.
+// DEMO [1.47]: Compare the id text with the bigint maximum
 const BIGINT_MAX = '9223372036854775807';
 
 // Reject non-digits and out-of-range ids. Leading zeros matter only for that check.
+// DEMO [1.46]: Non-digits are rejected; the original string is returned
 function parseListingId(value: string): string {
   if (!/^\d+$/.test(value)) {
     throw new BadRequestException('listingId must contain only digits.');
@@ -85,6 +87,7 @@ function parseListingId(value: string): string {
 }
 
 // Allowlist only. An unknown sort is a 400 and never becomes SQL.
+// DEMO [1.28]: Unknown sort is a 400 and never becomes SQL
 function parseSort(value: string | undefined): ListingSort {
   if (value === undefined || value === 'name_asc') {
     return 'name_asc';
@@ -113,11 +116,13 @@ export class AppController {
     return this.appService.getDatabaseStatus();
   }
 
+  // DEMO [1.16]: Neighbourhood route forwards the request to the service
   @Get('neighbourhoods')
   getNeighbourhoods(): Promise<string[]> {
     return this.appService.getNeighbourhoods();
   }
 
+  // DEMO [1.8]: Listings route parses the query, then calls the service
   @Get('listings')
   getListings(
     @Query('limit') limitQuery?: string,
@@ -138,6 +143,7 @@ export class AppController {
     const maxPrice = maxPriceQuery
       ? parsePrice('maxPrice', maxPriceQuery)
       : null;
+    // DEMO [1.34]: Bad guests, limit, price, or sort is a 400
     const guests = guestsQuery ? parseInteger('guests', guestsQuery, 1) : null;
     const bedrooms = bedroomsQuery
       ? parseInteger('bedrooms', bedroomsQuery, 1)
@@ -154,6 +160,7 @@ export class AppController {
       throw new BadRequestException('neighbourhood is too long.');
     }
 
+    // DEMO [1.27]: Inverted prices are a 400 if they reach the API
     if (minPrice && maxPrice && Number(minPrice) > Number(maxPrice)) {
       throw new BadRequestException('minPrice cannot exceed maxPrice.');
     }
@@ -176,6 +183,7 @@ export class AppController {
     const parsedListingId = parseListingId(listingId);
     const listing = await this.appService.getListing(parsedListingId);
 
+    // DEMO [1.48]: Valid id with no row is 404; a bad id is 400
     if (!listing) {
       throw new NotFoundException('Listing not found.');
     }
